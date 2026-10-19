@@ -54,6 +54,13 @@ rocBLAS remain enabled. It contains no gfx900 override or copied 6.3.4 kernels.
 `FRIGATE_ROCM_NATIVE_GFX90C=1` prevents the detector's legacy APU helper from
 silently setting an architecture override and rejects a conflicting override.
 
+The pinned MIGraphX revision calls a hipBLASLt-only helper even when that backend
+is disabled. `patches/migraphx-rocblas-only.patch` guards that call with the same
+compile option as its declaration. It preserves the rocBLAS selection when
+hipBLASLt is unavailable. The source archive is SHA256-checked, and the patch
+must apply without fuzz. The installed source receipt includes the patch and
+its digest.
+
 The SDK and MIGraphX build independently of the Frigate dependency stages on
 Debian 12 with Python 3.11. Explicit cache-only Bake targets let their builds
 start alongside the Frigate dependencies and preserve completed SDK/compiler

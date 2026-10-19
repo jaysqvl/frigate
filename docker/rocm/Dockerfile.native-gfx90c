@@ -30,10 +30,14 @@ RUN pip3 install --break-system-packages --no-cache-dir \
 FROM native-sdk AS migraphx-build
 
 ARG MIGRAPHX_COMMIT=95672916ed289d4be9d230a9be732e1bbad97e8c
+ARG MIGRAPHX_ARCHIVE_SHA256=74bc4a0679a72db2e4ae4ad914139e1d7f433cc35a30d23af4c4e32a67c17491
 ARG ROCM_CMAKE_COMMIT=6a7c5b73b8882c74f8f7060e2633f230dabb7b63
 ARG BUILD_JOBS=2
 
-RUN pip3 install --break-system-packages --no-cache-dir \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends patch && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip3 install --break-system-packages --no-cache-dir \
         cmake==3.31.10 pybind11==3.0.1
 
 WORKDIR /build
@@ -44,10 +48,13 @@ RUN curl --fail --location --retry 3 \
     cmake -S rocm-cmake -B rocm-cmake-build -DCMAKE_INSTALL_PREFIX=/usr/local && \
     cmake --build rocm-cmake-build --target install
 
+COPY docker/rocm/patches/migraphx-rocblas-only.patch /tmp/migraphx-rocblas-only.patch
 RUN curl --fail --location --retry 3 \
         "https://github.com/ROCm/AMDMIGraphX/archive/${MIGRAPHX_COMMIT}.tar.gz" \
         -o migraphx.tar.gz && \
+    echo "${MIGRAPHX_ARCHIVE_SHA256}  migraphx.tar.gz" | sha256sum --check --status && \
     mkdir migraphx && tar -xzf migraphx.tar.gz --strip-components=1 -C migraphx && \
+    patch --batch --forward --fuzz=0 -p1 -d migraphx < /tmp/migraphx-rocblas-only.patch && \
     cmake -S migraphx -B migraphx-build \
         -DCMAKE_C_COMPILER=amdclang \
         -DCMAKE_CXX_COMPILER=amdclang++ \
@@ -72,10 +79,12 @@ RUN curl --fail --location --retry 3 \
     cmake --build migraphx-build --parallel "${BUILD_JOBS}" && \
     cmake --install migraphx-build && \
     mkdir -p /opt/migraphx/share/frigate && \
+    cp /tmp/migraphx-rocblas-only.patch /opt/migraphx/share/frigate/ && \
     printf 'MIGraphX=%s\nROCm-CMake=%s\nGPU_TARGETS=gfx90c\nSDK=10.1.0a20260910\n' \
         "$MIGRAPHX_COMMIT" "$ROCM_CMAKE_COMMIT" \
         > /opt/migraphx/share/frigate/build-sources.txt && \
     sha256sum migraphx.tar.gz rocm-cmake.tar.gz \
+        /opt/migraphx/share/frigate/migraphx-rocblas-only.patch \
         > /opt/migraphx/share/frigate/source-archives.sha256
 
 FROM deps AS rocm-deps
