@@ -42,7 +42,8 @@ qualified, so inference results can be compared without an application upgrade.
 ## Native gfx90c experiment
 
 The experiment pins all four AMD SDK components and their metapackage to
-`10.1.0a20260910`, the same published ROCm 10.1 nightly. The stable 10.1 index does
+`10.1.0a20260910`, the same published ROCm 10.1 nightly, with SHA256 checks for
+all five downloaded archives. The stable 10.1 index does
 not publish gfx90c device wheels. This image therefore uses a prerelease SDK,
 not a claim of supported stable 10.1 hardware compatibility.
 
@@ -53,9 +54,14 @@ rocBLAS remain enabled. It contains no gfx900 override or copied 6.3.4 kernels.
 `FRIGATE_ROCM_NATIVE_GFX90C=1` prevents the detector's legacy APU helper from
 silently setting an architecture override and rejects a conflicting override.
 
-The SDK and MIGraphX build independently of the Frigate dependency stages so a
-Frigate change does not force a GPU compiler rebuild. Both use Debian 12 and
-Python 3.11. The SDK's expanded development tree stays in this experimental image to
+The SDK and MIGraphX build independently of the Frigate dependency stages on
+Debian 12 with Python 3.11. Explicit cache-only Bake targets let their builds
+start alongside the Frigate dependencies and preserve completed SDK/compiler
+work between attempts. Only the `rocm` target publishes a runnable candidate.
+The final image inherits Frigate's newer Intel runtime
+dependencies, which include trixie's C library. Its C++ development headers also
+come from trixie so HIPRTC does not request incompatible bookworm libc headers.
+The SDK's expanded development tree stays in this experimental image to
 preserve its vendor-relative library links and runtime compiler headers. The
 installed package URLs and archive digests are recorded in
 `/opt/rocm-native-package-report.json`; the MIGraphX source revisions and archive

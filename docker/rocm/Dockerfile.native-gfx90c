@@ -96,9 +96,16 @@ ENV AMD_COMGR_CACHE=1
 ENV AMD_COMGR_CACHE_DIR=/config/model_cache/migraphx
 
 COPY docker/rocm/debian-backports.sources /etc/apt/sources.list.d/debian-backports.sources
+# Frigate's Intel runtime dependencies upgrade libc from trixie. Its matching
+# development headers are needed by HIPRTC; bookworm's libc6-dev cannot coexist.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-        g++ libnuma1 libomp-dev libstdc++-12-dev libprotobuf32 libsqlite3-0 && \
+        libnuma1 libomp-dev libprotobuf32 libsqlite3-0 && \
+    printf 'deb http://deb.debian.org/debian trixie main\n' \
+        > /etc/apt/sources.list.d/trixie.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends -t trixie libstdc++-14-dev && \
+    rm /etc/apt/sources.list.d/trixie.list && \
     apt-get install -y --no-install-recommends -t bookworm-backports \
         mesa-va-drivers mesa-vulkan-drivers && \
     rm -rf /var/lib/apt/lists/*
