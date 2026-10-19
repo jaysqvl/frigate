@@ -39,8 +39,9 @@ cache, database, JWT secret, media directory, and cache tmpfs. Never mount the
 production config or media directories into the development container.
 
 Use dedicated host ports, for example `8972:8971`, `8556:8554`, and TCP/UDP
-`8557:8555`. Do not publish the unauthenticated port 5000. Disable MQTT,
-notifications, recording, snapshots, camera control, and detection initially.
+`8557:8555`. Publish `5001:5000` for direct, unauthenticated access to the dev UI
+on the trusted LAN. The main service keeps its existing host port 5000. Disable
+MQTT, notifications, recording, snapshots, camera control, and detection initially.
 Use a fresh database. Copy only the required ONNX model and label map, never the
 production compiled model cache, credentials, or database.
 
