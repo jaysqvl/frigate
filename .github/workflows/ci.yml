@@ -85,8 +85,15 @@ jobs:
             rocm.labels.org.opencontainers.image.source=https://github.com/${{ github.repository }}
             rocm.labels.org.opencontainers.image.revision=${{ github.sha }}
             rocm.labels.video.frigate.reproduction-source=fdeafe9f4c401644f6acc7389e8f406dd241d068
-            *.cache-from=type=gha,scope=${{ steps.metadata.outputs.variant }}
-            *.cache-to=type=gha,scope=${{ steps.metadata.outputs.variant }},mode=max
+            deps.cache-from=type=gha,scope=${{ steps.metadata.outputs.variant }}
+            deps.cache-from=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-deps
+            deps.cache-to=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-deps,mode=max,ignore-error=true
+            rootfs.cache-from=type=gha,scope=${{ steps.metadata.outputs.variant }}
+            rootfs.cache-from=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-rootfs
+            rootfs.cache-to=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-rootfs,mode=max,ignore-error=true
+            rocm.cache-from=type=gha,scope=${{ steps.metadata.outputs.variant }}
+            rocm.cache-from=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-${{ steps.metadata.outputs.variant }}
+            rocm.cache-to=type=registry,ref=${{ steps.metadata.outputs.image }}:cache-${{ steps.metadata.outputs.variant }},mode=max,ignore-error=true
 
       - name: Save build receipt
         env:

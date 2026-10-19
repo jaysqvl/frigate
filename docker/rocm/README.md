@@ -28,6 +28,13 @@ Use the resulting immutable registry digest for deployment. A successful image
 build does not establish that GPU inference works on the target machine.
 The build metadata is retained as a workflow artifact.
 
+Common dependencies and web assets use the registry cache tags `cache-deps`
+and `cache-rootfs` so both branches can reuse them. Each runtime has a separate
+`cache-<branch>` tag. These are build caches, not runnable deployment images.
+Existing GitHub Actions branch caches are imported when available; new caches
+are exported to the registry. A failed cache export warns without failing an
+otherwise successful image publication.
+
 The `rocm-10.1-gfx90c` experiment uses a separate branch and candidate tag. Its
 Frigate application should remain at the same baseline while the runtime is
 qualified, so inference results can be compared without an application upgrade.
