@@ -25,6 +25,7 @@ RUN apt update && \
 # Install migraphx built with gfx900 included as a target
 WORKDIR /tmp
 RUN wget https://github.com/garymathews/AMDMIGraphX/releases/download/v7.2.4/migraphx-v7.2.4-1.29.0.tar.gz && \
+    echo "633279fbd5a1f7f16b9e60cfca312418890d66befbbcec60fe1067f739719882  migraphx-v7.2.4-1.29.0.tar.gz" | sha256sum -c - && \
     tar -xvzf migraphx-*.tar.gz -C /opt/rocm-$ROCM
 
 # Copy rocBLAS libraries for gfx900 from ROCm 6.3.4 (last version with gfx900 support)

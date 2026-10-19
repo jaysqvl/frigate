@@ -1,78 +1,108 @@
-name: CI
+name: Vega ROCm image
 
 on:
   workflow_dispatch:
   push:
     branches:
-      - dev
-      - master
-      - rocm-*
+      - rocm-7.2.4
+      - rocm-10.1-gfx90c
     paths-ignore:
       - "docs/**"
 
-# only run the latest commit to avoid cache overwrites
+permissions:
+  contents: read
+  packages: write
+
 concurrency:
-  group: ${{ github.ref }}
+  group: vega-image-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PYTHON_VERSION: 3.11
-
 jobs:
-  amd64_build:
+  image:
     runs-on: ubuntu-22.04
-    name: AMD64 Build
+    timeout-minutes: 180
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Setup
-        id: setup
-        uses: ./.github/actions/setup
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: docker/main/Dockerfile
-          push: false
-          platforms: linux/amd64
-          target: frigate
-          tags: ${{ steps.setup.outputs.image-name }}-amd64
-          cache-from: type=registry,ref=${{ steps.setup.outputs.cache-name }}-amd64
-          cache-to: type=registry,ref=${{ steps.setup.outputs.cache-name }}-amd64,mode=max
-  
-  amd64_extra_builds:
-    runs-on: ubuntu-22.04
-    name: AMD64 ROCm Build
-    needs:
-      - amd64_build
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
+      - name: Prepare image metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          variant="${GITHUB_REF_NAME}"
+          case "$variant" in
+            rocm-7.2.4|rocm-10.1-gfx90c) ;;
+            *) echo "Unsupported image branch: $variant" >&2; exit 1 ;;
+          esac
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+          echo "variant=$variant" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${GITHUB_SHA:0:7}" >> "$GITHUB_OUTPUT"
+          make version
 
-      - name: Setup
-        id: setup
-        uses: ./.github/actions/setup
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stop Docker before preparing build storage
+        run: sudo systemctl stop docker
 
-      - name: Build and push
-        env:
-          HSA_OVERRIDE: 0
+      - name: Make room for the image build
+        uses: easimon/maximize-build-space@fc881a613ad2a34aca9c9624518214ebc21dfc0c # v10
+        with:
+          root-reserve-mb: 8192
+          temp-reserve-mb: 4096
+          swap-size-mb: 4096
+          remove-dotnet: "true"
+          remove-android: "true"
+          remove-haskell: "true"
+          remove-codeql: "true"
+          build-mount-path: /var/lib/docker
+
+      - name: Start Docker
+        run: sudo systemctl start docker
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and publish candidate
+        id: build
         uses: docker/bake-action@v7
+        env:
+          HSA_OVERRIDE: "0"
+          DOCKER_BUILD_SUMMARY: "true"
         with:
           source: .
-          push: true
-          targets: rocm
           files: docker/rocm/rocm.hcl
+          targets: rocm
+          push: true
           set: |
-            rocm.tags=${{ steps.setup.outputs.image-name }}-${{ github.ref_name }}
-            rocm.tags=${{ steps.setup.outputs.latest-name }}-${{ github.ref_name }}
-            *.cache-to=type=registry,ref=${{ steps.setup.outputs.cache-name }}-rocm,mode=max
-            *.cache-from=type=registry,ref=${{ steps.setup.outputs.cache-name }}-rocm
+            rocm.tags=${{ steps.metadata.outputs.image }}:${{ steps.metadata.outputs.short_sha }}-${{ steps.metadata.outputs.variant }}
+            rocm.tags=${{ steps.metadata.outputs.image }}:candidate-${{ steps.metadata.outputs.variant }}
+            rocm.labels.org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            rocm.labels.org.opencontainers.image.revision=${{ github.sha }}
+            rocm.labels.video.frigate.reproduction-source=fdeafe9f4c401644f6acc7389e8f406dd241d068
+            *.cache-from=type=gha,scope=${{ steps.metadata.outputs.variant }}
+            *.cache-to=type=gha,scope=${{ steps.metadata.outputs.variant }},mode=max
+
+      - name: Save build receipt
+        env:
+          BUILD_METADATA: ${{ steps.build.outputs.metadata }}
+          IMAGE: ${{ steps.metadata.outputs.image }}
+          VARIANT: ${{ steps.metadata.outputs.variant }}
+          SHORT_SHA: ${{ steps.metadata.outputs.short_sha }}
+        run: |
+          printf '%s\n' "$BUILD_METADATA" > build-metadata.json
+          {
+            echo "Candidate: $IMAGE:$SHORT_SHA-$VARIANT"
+            echo "Source: https://github.com/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+            echo "GPU qualification is separate from this image build."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build-metadata-${{ steps.metadata.outputs.variant }}
+          path: build-metadata.json
