@@ -78,11 +78,23 @@ def detect_amd_gfx_id():
     return subprocess.getoutput("unset HSA_OVERRIDE_GFX_VERSION && /opt/rocm/bin/rocminfo 2>/dev/null | grep gfx | head -1 | awk '{print $2}'")
 
 def apply_amd_compatibility_env_vars():
+    """Apply APU workarounds while preserving a native gfx90c build target."""
+    native_gfx90c = os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") == "1"
     gfx_id = detect_amd_gfx_id()
     if not gfx_id:
+        if native_gfx90c:
+            raise RuntimeError("Unable to detect the required gfx90c GPU")
         return
 
-    logger.info(f"Setting AMD environment variables for {gfx_id} compatibility...")
+    if native_gfx90c:
+        if gfx_id != "gfx90c":
+            raise RuntimeError("The native gfx90c image requires a gfx90c GPU")
+        if os.environ.get("HSA_OVERRIDE_GFX_VERSION"):
+            raise RuntimeError(
+                "Native gfx90c requires HSA_OVERRIDE_GFX_VERSION to be unset"
+            )
+
+    logger.info("Setting AMD environment variables for %s compatibility", gfx_id)
 
     configs = {
         ("gfx902", "gfx909", "gfx90c"): {
@@ -94,6 +106,8 @@ def apply_amd_compatibility_env_vars():
     for gfx_ids, vars in configs.items():
         if gfx_id in gfx_ids:
             for var, value in vars.items():
+                if native_gfx90c and var == "HSA_OVERRIDE_GFX_VERSION":
+                    continue
                 if var not in os.environ:
                     os.environ[var] = value
-                    logger.info(f"  - \"{var}={value}\"")
+                    logger.info("Set %s=%s", var, value)

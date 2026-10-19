@@ -1,0 +1,122 @@
+# syntax=docker/dockerfile:1.4
+
+# Native gfx90c experiment. The Frigate source is shared with the 7.2.4 baseline.
+FROM debian:12 AS native-sdk
+
+ARG DEBIAN_FRONTEND=noninteractive
+ENV PYTHONPATH=/opt/rocm-python
+ENV ROCM_PATH=/opt/rocm
+ENV HIP_PATH=/opt/rocm
+ENV PATH="/opt/rocm-python/bin:/opt/rocm/bin:/opt/rocm/lib/llvm/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/migraphx/lib:/opt/rocm/lib:/opt/rocm/lib/llvm/lib:${LD_LIBRARY_PATH}"
+
+COPY docker/rocm/debian-backports.sources /etc/apt/sources.list.d/debian-backports.sources
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl g++ libnuma1 libomp-dev libstdc++-12-dev \
+        libprotobuf-dev protobuf-compiler libmsgpack-cxx-dev \
+        libsqlite3-dev nlohmann-json3-dev python3 python3-pip python3-dev \
+        pkg-config make && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY docker/rocm/requirements-native-gfx90c.txt /tmp/requirements-native-gfx90c.txt
+RUN pip3 install --break-system-packages --no-cache-dir \
+        --target=/opt/rocm-python \
+        --report=/opt/rocm-native-package-report.json \
+        -r /tmp/requirements-native-gfx90c.txt && \
+    python3 -m rocm_sdk init && \
+    ln -s "$(python3 -m rocm_sdk path --root)" /opt/rocm
+
+FROM native-sdk AS migraphx-build
+
+ARG MIGRAPHX_COMMIT=95672916ed289d4be9d230a9be732e1bbad97e8c
+ARG ROCM_CMAKE_COMMIT=6a7c5b73b8882c74f8f7060e2633f230dabb7b63
+ARG BUILD_JOBS=2
+
+RUN pip3 install --break-system-packages --no-cache-dir \
+        cmake==3.31.10 pybind11==3.0.1
+
+WORKDIR /build
+RUN curl --fail --location --retry 3 \
+        "https://github.com/ROCm/rocm-cmake/archive/${ROCM_CMAKE_COMMIT}.tar.gz" \
+        -o rocm-cmake.tar.gz && \
+    mkdir rocm-cmake && tar -xzf rocm-cmake.tar.gz --strip-components=1 -C rocm-cmake && \
+    cmake -S rocm-cmake -B rocm-cmake-build -DCMAKE_INSTALL_PREFIX=/usr/local && \
+    cmake --build rocm-cmake-build --target install
+
+RUN curl --fail --location --retry 3 \
+        "https://github.com/ROCm/AMDMIGraphX/archive/${MIGRAPHX_COMMIT}.tar.gz" \
+        -o migraphx.tar.gz && \
+    mkdir migraphx && tar -xzf migraphx.tar.gz --strip-components=1 -C migraphx && \
+    cmake -S migraphx -B migraphx-build \
+        -DCMAKE_C_COMPILER=amdclang \
+        -DCMAKE_CXX_COMPILER=amdclang++ \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_INSTALL_PREFIX=/opt/migraphx \
+        -DCMAKE_PREFIX_PATH="$(python3 -m rocm_sdk path --cmake);/usr/local;$(python3 -m pybind11 --cmakedir)" \
+        -DCMAKE_INSTALL_RPATH="/opt/migraphx/lib;/opt/rocm/lib;/opt/rocm/lib/llvm/lib" \
+        -DGPU_TARGETS=gfx90c \
+        -DPYTHON_VERSIONS=3.11 \
+        -DBUILD_TESTING=OFF \
+        -DMIGRAPHX_ENABLE_CPU=OFF \
+        -DMIGRAPHX_ENABLE_MLIR=OFF \
+        -DMIGRAPHX_ENABLE_TENSORFLOW=OFF \
+        -DMIGRAPHX_ENABLE_ONNX=ON \
+        -DMIGRAPHX_ENABLE_PYTHON=ON \
+        -DMIGRAPHX_USE_MIOPEN=ON \
+        -DMIGRAPHX_USE_ROCBLAS=ON \
+        -DMIGRAPHX_USE_HIPBLASLT=OFF \
+        -DMIGRAPHX_USE_COMPOSABLEKERNEL=OFF \
+        -DMIGRAPHX_USE_EIGEN=OFF \
+        -DMIGRAPHX_USE_AMDMLSS=OFF && \
+    cmake --build migraphx-build --parallel "${BUILD_JOBS}" && \
+    cmake --install migraphx-build && \
+    mkdir -p /opt/migraphx/share/frigate && \
+    printf 'MIGraphX=%s\nROCm-CMake=%s\nGPU_TARGETS=gfx90c\nSDK=10.1.0a20260910\n' \
+        "$MIGRAPHX_COMMIT" "$ROCM_CMAKE_COMMIT" \
+        > /opt/migraphx/share/frigate/build-sources.txt && \
+    sha256sum migraphx.tar.gz rocm-cmake.tar.gz \
+        > /opt/migraphx/share/frigate/source-archives.sha256
+
+FROM deps AS rocm-deps
+
+ENV PYTHONPATH="/opt/migraphx/lib:/opt/rocm-python"
+ENV ROCM_PATH=/opt/rocm
+ENV HIP_PATH=/opt/rocm
+ENV PATH="/opt/rocm-python/bin:/opt/rocm/bin:/opt/rocm/lib/llvm/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/opt/migraphx/lib:/opt/rocm/lib:/opt/rocm/lib/llvm/lib:${LD_LIBRARY_PATH}"
+ENV FRIGATE_ROCM_NATIVE_GFX90C=1
+ENV HSA_ENABLE_SDMA=0
+ENV MIGRAPHX_DISABLE_MIOPEN_FUSION=1
+ENV MIGRAPHX_DISABLE_SCHEDULE_PASS=1
+ENV MIGRAPHX_DISABLE_REDUCE_FUSION=1
+ENV MIOPEN_CUSTOM_CACHE_DIR=/config/model_cache/migraphx
+ENV MIOPEN_USER_DB_PATH=/config/model_cache/migraphx
+ENV AMD_COMGR_CACHE=1
+ENV AMD_COMGR_CACHE_DIR=/config/model_cache/migraphx
+
+COPY docker/rocm/debian-backports.sources /etc/apt/sources.list.d/debian-backports.sources
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        g++ libnuma1 libomp-dev libstdc++-12-dev libprotobuf32 libsqlite3-0 && \
+    apt-get install -y --no-install-recommends -t bookworm-backports \
+        mesa-va-drivers mesa-vulkan-drivers && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=native-sdk /opt/rocm-python /opt/rocm-python
+COPY --from=native-sdk /opt/rocm-native-package-report.json /opt/rocm-native-package-report.json
+RUN ln -s "$(python3 -m rocm_sdk path --root)" /opt/rocm
+
+WORKDIR /opt/frigate
+COPY --from=migraphx-build /opt/migraphx /opt/migraphx
+COPY --from=rootfs / /
+COPY docker/rocm/qualify_gpu.py /opt/frigate/qualify_gpu.py
+
+# Object detection uses the direct MIGraphX detector. ONNX enrichments stay on
+# the CPU until a matching native GPU execution provider is qualified separately.
+RUN pip3 install --break-system-packages --no-cache-dir onnxruntime==1.29.0 && \
+    printf '/opt/migraphx/lib\n/opt/rocm/lib\n/opt/rocm/lib/llvm/lib\n' \
+        > /etc/ld.so.conf.d/frigate-native-rocm.conf && \
+    ldconfig && \
+    python3 -c 'import migraphx; import onnxruntime; print("Native gfx90c module imports passed")' && \
+    python3 -u -m unittest frigate.test.test_amd_compatibility

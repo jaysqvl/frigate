@@ -39,6 +39,48 @@ The `rocm-10.1-gfx90c` experiment uses a separate branch and candidate tag. Its
 Frigate application should remain at the same baseline while the runtime is
 qualified, so inference results can be compared without an application upgrade.
 
+## Native gfx90c experiment
+
+The experiment pins all four AMD SDK components and their metapackage to
+`10.1.0a20260910`, the same published ROCm 10.1 nightly. The stable 10.1 index does
+not publish gfx90c device wheels. This image therefore uses a prerelease SDK,
+not a claim of supported stable 10.1 hardware compatibility.
+
+MIGraphX 2.18.0 is compiled from AMD commit
+`95672916ed289d4be9d230a9be732e1bbad97e8c` with `GPU_TARGETS=gfx90c`. The build
+disables hipBLASLt, Composable Kernel, rocMLIR, and the CPU backend. MIOpen and
+rocBLAS remain enabled. It contains no gfx900 override or copied 6.3.4 kernels.
+`FRIGATE_ROCM_NATIVE_GFX90C=1` prevents the detector's legacy APU helper from
+silently setting an architecture override and rejects a conflicting override.
+
+The SDK and MIGraphX build independently of the Frigate dependency stages so a
+Frigate change does not force a GPU compiler rebuild. Both use Debian 12 and
+Python 3.11. The SDK's expanded development tree stays in this experimental image to
+preserve its vendor-relative library links and runtime compiler headers. The
+installed package URLs and archive digests are recorded in
+`/opt/rocm-native-package-report.json`; the MIGraphX source revisions and archive
+digests are under `/opt/migraphx/share/frigate/`.
+
+Only direct MIGraphX object detection is being qualified on the GPU. ONNX Runtime
+1.29.0 is installed without a GPU provider, so ONNX enrichments use the CPU in
+this experiment. Native GPU support for those enrichments is separate work.
+
+Use a separate cache directory from the 7.2.4 image, even when the ONNX file is
+identical. Do not load the older image's compiled `.mxr`, MIOpen, or COMGR caches.
+
+`/opt/frigate/qualify_gpu.py` performs one warmup and at most 20 measured
+inferences on a supplied image or zero tensor. It preserves the BGR/NCHW/float
+320px contract and reports model/input hashes, compile time, inference times,
+and detections as JSON. Run it with a fresh, isolated `/config` mount, the copied
+model and label map, GPU device access, a memory limit, and a command timeout.
+Pass `--raw-output /network-output.npy` to save the raw network output from
+one additional inference for numerical comparison against the CPU reference.
+Copy that file out before retiring the qualification container. A tmpfs output
+path disappears when the container stops.
+Use the identical script and input for both runtimes. A zero tensor checks
+execution only; output agreement on a fixed camera image is not a ground-truth
+accuracy evaluation.
+
 ## Development deployment
 
 The development service is named `frigate-dev`. It has its own `/config`, model

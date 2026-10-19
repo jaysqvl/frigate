@@ -1,0 +1,10 @@
+--index-url https://nightly.repo.amd.com/rocm/whl-next/
+--extra-index-url https://pypi.org/simple/
+
+# The stable 10.1 index has no gfx90c device package. Keep every SDK component
+# on the same published 10.1 prerelease instead of mixing stable and nightly.
+rocm[libraries,devel,device-gfx90c] == 10.1.0a20260910
+rocm-sdk-core == 10.1.0a20260910
+rocm-sdk-libraries == 10.1.0a20260910
+rocm-sdk-devel == 10.1.0a20260910
+rocm-sdk-device-gfx90c == 10.1.0a20260910
