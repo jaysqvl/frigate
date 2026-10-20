@@ -1,0 +1,9 @@
+# CPU-only audit dependencies, not runtime image requirements.
+numpy==1.26.4
+opencv-python-headless==4.11.0.86
+pydantic==2.14.1
+requests==2.34.2
+ruamel.yaml==0.19.1
+psutil==7.2.2
+peewee==4.5.3
+Unidecode==1.4.0

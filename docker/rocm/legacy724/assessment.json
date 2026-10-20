@@ -1,0 +1,52 @@
+{
+  "assessment_date_utc": "2026-10-20",
+  "state": "offline_source_feasibility_only",
+  "upstream_dev": "5bb2cde8b39b682e5b583f224bd58cc9ea975608",
+  "legacy_frigate": "fdeafe9f4c401644f6acc7389e8f406dd241d068",
+  "legacy_reproduction_branch_head": "f0ac7282a1ac16e4989dce303dc8df2f428c01d0",
+  "runtime_versions": {
+    "rocm": "7.2.4",
+    "migraphx": "2.15.0",
+    "python_abi": "cp311-linux-x86_64",
+    "numpy": "1.26.*",
+    "gfx_target": "gfx900",
+    "native_gfx90c": false
+  },
+  "prototype": {
+    "sha256": "49453875bf3466e02c445be740c5250feefb9e266cb4c0446bb85687997bf9fd",
+    "added_python_files": 2,
+    "added_python_lines": 351,
+    "modified_existing_application_files": 0,
+    "applied_to_checkout": false
+  },
+  "validation": {
+    "cpu_mock_tests_passed": 10,
+    "ruff_check": "passed",
+    "ruff_format": "passed",
+    "git_apply_check": "passed",
+    "upstream_input_transformation_ast_matches_baseline": true,
+    "full_application_tests": false,
+    "linux_binary_linking": false,
+    "image_built": false,
+    "gpu_execution": false,
+    "nas_contacted": false,
+    "production_changed": false
+  },
+  "ownership_gaps": [
+    "Exact build provenance of Gary MIGraphX 1.29.0-variant archive",
+    "Unpinned ROCm apt package builds and hashes",
+    "Unhashed 6.3.4 rocBLAS archive",
+    "Unpinned Python-binding source fallback",
+    "Custom ORT wheel removal needs Linux linking/application verification"
+  ],
+  "configuration": {
+    "model_device": "migraphx:GPU",
+    "model_type": "yolo-generic",
+    "conserve_cpu": true,
+    "fast_math": true,
+    "exhaustive_tune": true,
+    "tuning_bridge": "FRIGATE_MIGRAPHX_* environment values 0 or 1",
+    "dev_recording": false
+  },
+  "rocm_10_1_compiler_work": "on_hold"
+}

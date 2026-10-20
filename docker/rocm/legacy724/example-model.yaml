@@ -1,0 +1,16 @@
+# Offline proposal only. This is not a complete camera configuration.
+# Preserve the existing camera, detection, VAAPI, masks, zones, and filter settings.
+models:
+  - scene: default
+    devices: [migraphx:GPU]
+    path: /config/model_cache/yolo26s-distill_320.onnx
+    labelmap_path: /config/model_cache/coco-labels-frigate.txt
+    model_type: yolo-generic
+    input_pixel_format: bgr
+    input_tensor: nchw
+    input_dtype: float
+    width: 320
+    height: 320
+
+record:
+  enabled: false
