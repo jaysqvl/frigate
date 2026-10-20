@@ -1,6 +1,6 @@
 {
   "assessment_date_utc": "2026-10-20",
-  "state": "linux_image_built_and_offline_cpu_qualified",
+  "state": "live_dev_qualified",
   "upstream_dev": "5bb2cde8b39b682e5b583f224bd58cc9ea975608",
   "legacy_frigate": "fdeafe9f4c401644f6acc7389e8f406dd241d068",
   "legacy_reproduction_branch_head": "f0ac7282a1ac16e4989dce303dc8df2f428c01d0",
@@ -19,7 +19,28 @@
     "added_python_lines": 402,
     "modified_existing_application_files": 0
   },
-  "validation": {
+  "ownership_gaps": [
+    "Frozen Gary runtime binary is still externally supplied; exact owned-source reproduction remains unverified"
+  ],
+  "configuration": {
+    "model_device": "migraphx:GPU",
+    "model_type": "yolo-generic",
+    "conserve_cpu": true,
+    "fast_math": true,
+    "exhaustive_tune": true,
+    "tuning_bridge": "FRIGATE_MIGRAPHX_* environment values 0 or 1",
+    "dev_recording": false
+  },
+  "rocm_10_1_compiler_work": "on_hold",
+  "image": {
+    "tag": "frigate-local:upstream-5bb2cde-rocm724-headers",
+    "id": "sha256:3649c65ae2f38fbd957c31169f4c9a4b84e98971e4567fe8ec36a98ef6888c85",
+    "bytes": 11198442677,
+    "platform": "linux/amd64",
+    "application_assembly": "official pinned upstream standard image plus two restored detector files",
+    "amd_runtime_assembly": "immutable working Gary image; no compiler rebuild"
+  },
+  "offline_validation": {
     "linux_mock_detector_tests_passed": 10,
     "linux_upstream_config_migration_tests_passed": 24,
     "ruff_check": "passed",
@@ -67,28 +88,7 @@
       "optimized_nms"
     ]
   },
-  "ownership_gaps": [
-    "Frozen Gary runtime binary is still externally supplied; exact owned-source reproduction remains unverified"
-  ],
-  "configuration": {
-    "model_device": "migraphx:GPU",
-    "model_type": "yolo-generic",
-    "conserve_cpu": true,
-    "fast_math": true,
-    "exhaustive_tune": true,
-    "tuning_bridge": "FRIGATE_MIGRAPHX_* environment values 0 or 1",
-    "dev_recording": false
-  },
-  "rocm_10_1_compiler_work": "on_hold",
-  "image": {
-    "tag": "frigate-local:upstream-5bb2cde-rocm724",
-    "id": "sha256:2d1693412060ef1f2cfbe3b2d45e3e5ab5ce46d76c679be6e7d1b216539f33c8",
-    "bytes": 15307091475,
-    "platform": "linux/amd64",
-    "application_assembly": "official pinned upstream standard image plus two restored detector files",
-    "amd_runtime_assembly": "immutable working Gary image; no compiler rebuild"
-  },
-  "cleanup": {
+  "offline_cleanup": {
     "owned_temporary_containers_removed": 11,
     "input_images_explicitly_removed": 2,
     "superseded_candidate_already_absent": true,
@@ -96,5 +96,68 @@
     "volumes_deleted": 0,
     "global_prune": false,
     "local_build_vm_stopped": true
+  },
+  "previous_offline_image": {
+    "tag": "frigate-local:upstream-5bb2cde-rocm724",
+    "id": "sha256:2d1693412060ef1f2cfbe3b2d45e3e5ab5ce46d76c679be6e7d1b216539f33c8",
+    "bytes": 15307091475,
+    "platform": "linux/amd64",
+    "application_assembly": "official pinned upstream standard image plus two restored detector files",
+    "amd_runtime_assembly": "immutable working Gary image; no compiler rebuild",
+    "state": "superseded_missing_c_development_headers",
+    "retained": false
+  },
+  "live_validation": {
+    "cpu_only_hiprtc_regression": {
+      "hiprtc_compile": "passed",
+      "explicit_target": "gfx900",
+      "code_bytes": 3704,
+      "features_header_sha256": "20c5358da5ab2353b26bda1b36e66400290fbd2b16d30a6a21dc16f4f22ab280",
+      "gpu_devices_exposed": false,
+      "gpu_enumeration_execution": false
+    },
+    "linking_repeated_after_header_fix": true,
+    "version": "0.19.0-5bb2cde",
+    "hardware": "Ryzen 7 5700G gfx90c using the existing gfx900 compatibility override",
+    "camera_count": 5,
+    "model_sha256": "6c2662cd56393e30041cc67ca14b18c20388d7234ebd159b3eb998ec5371197e",
+    "model_contract_and_camera_settings_preserved": true,
+    "steady_camera_process_fps": "approximately 5 FPS each",
+    "steady_skipped_fps": 0,
+    "bounded_stable_seconds": 130.3,
+    "positive_detection_samples": 12,
+    "cached_production_program_reused": true,
+    "first_use_miopen_kernels_compiled": true,
+    "fresh_onnx_to_migraphx_compilation_tested": false,
+    "config_version": "0.19-0",
+    "last_database_migration": "039_add_perf_indexes",
+    "database_integrity": "ok",
+    "users_jwt_model_labels_preserved": true,
+    "recording_enabled": false,
+    "recording_files_and_rows": 0,
+    "unauthenticated_development_ui_verified": true,
+    "restream_proxy_verified": true,
+    "production_unchanged": true,
+    "gpu_reset": false,
+    "nas_reboot": false,
+    "isolated_performance_benchmark": false,
+    "amd_compiler_rebuilt": false,
+    "github_published": false
+  },
+  "live_packaging_fix": "Copy the complete frozen /usr/include tree; HIPRTC type_traits includes features.h and platform C headers",
+  "dev_config_repair": "Preserve the existing go2rtc API password as a string instead of an invalid YAML flow mapping; camera/model settings unchanged",
+  "cleanup": {
+    "status": "complete",
+    "nas_owned_stopped_containers_removed": 8,
+    "nas_unreferenced_images_removed": 3,
+    "local_superseded_image_removed": true,
+    "local_build_vm_stopped": true,
+    "temporary_archives_and_contexts_removed": true,
+    "recovery_backup_preserved": true,
+    "old_runtime_caches_preserved": true,
+    "volumes_deleted": 0,
+    "global_prune": false,
+    "development_accidental_recording_files_deleted": 18800,
+    "development_accidental_recording_logical_bytes_deleted": 244536473286
   }
 }

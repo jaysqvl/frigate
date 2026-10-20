@@ -9,9 +9,9 @@ FROM ${FRIGATE_IMAGE} AS frigate-legacy724
 USER root
 
 COPY --from=legacy-runtime /opt/rocm-7.2.4/ /opt/rocm-7.2.4/
-# Keep the same C++ headers and GCC support files used by HIPRTC fallback.
-COPY --from=legacy-runtime /usr/include/c++/14/ /usr/include/c++/14/
-COPY --from=legacy-runtime /usr/include/x86_64-linux-gnu/c++/14/ /usr/include/x86_64-linux-gnu/c++/14/
+# HIPRTC also needs the C development headers included by the C++ headers.
+# Keep the complete frozen include tree so first-use MIOpen compilation works.
+COPY --from=legacy-runtime /usr/include/ /usr/include/
 COPY --from=legacy-runtime /usr/lib/gcc/x86_64-linux-gnu/14/ /usr/lib/gcc/x86_64-linux-gnu/14/
 # These two OS libraries are absent from the standard image. Keep the exact
 # versions used by the frozen runtime rather than resolving new apt packages.

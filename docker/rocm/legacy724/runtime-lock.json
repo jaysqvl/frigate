@@ -10,7 +10,7 @@
     "sha256": "634426e75cd56368f640852bef685ac304ce4f5131812f66ace2c2df4528a514"
   },
   "ownership": "Our application adapter and image recipe; Gary's immutable runtime binary remains an external dependency",
-  "gpu_qualification": false,
+  "gpu_qualification": true,
   "application_config_digest": "sha256:7176ca7cf0422f0582f2dd59dd9722d19ab31352bc42e58ca15e4ec661fb12a5",
   "legacy_runtime_config_digest": "sha256:b16fcec2a1cbd8ae48dd3293efae33b3c279fbdb0ae725dc7e109b94be5226da",
   "external_libraries": {
@@ -22,5 +22,13 @@
       "source_package": "libomp5-19 1:19.1.7-3+b1",
       "sha256": "822498850962f32c8c967e6c4795aded591c93cc0a2e8d20ad58b04ccba4aea0"
     }
+  },
+  "gpu_qualification_scope": "5700G live dev, same YOLO26s 320px model using cached production program; first-use MIOpen kernels compiled; production unchanged",
+  "hiprtc_development_headers": {
+    "source": "same immutable legacy_runtime_image",
+    "include_tree": "/usr/include",
+    "gcc_support": "/usr/lib/gcc/x86_64-linux-gnu/14",
+    "features_header_sha256": "20c5358da5ab2353b26bda1b36e66400290fbd2b16d30a6a21dc16f4f22ab280",
+    "cpu_only_compile_regression": "passed for explicit gfx900 with no GPU devices exposed"
   }
 }

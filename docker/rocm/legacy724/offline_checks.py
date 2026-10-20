@@ -1,6 +1,7 @@
 """Qualify Linux linking and disposable appdata without starting Frigate."""
 
 import argparse
+import ctypes
 import hashlib
 import importlib.metadata
 import json
@@ -30,6 +31,75 @@ def sha256(path: Path) -> str:
     """Hash a file without loading large libraries into memory."""
     with path.open("rb") as source:
         return hashlib.file_digest(source, "sha256").hexdigest()
+
+
+def check_hiprtc() -> dict:
+    """Compile for explicit gfx900 on the CPU, without enumerating a GPU."""
+    require_isolation()
+    assert Path("/usr/include/features.h").is_file()
+    compiler = ctypes.CDLL("/opt/rocm/lib/libhiprtc.so")
+    program = ctypes.c_void_p()
+    compiler.hiprtcCreateProgram.argtypes = [
+        ctypes.POINTER(ctypes.c_void_p),
+        ctypes.c_char_p,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        ctypes.c_void_p,
+    ]
+    compiler.hiprtcCompileProgram.argtypes = [
+        ctypes.c_void_p,
+        ctypes.c_int,
+        ctypes.POINTER(ctypes.c_char_p),
+    ]
+    compiler.hiprtcGetProgramLogSize.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    compiler.hiprtcGetProgramLog.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    compiler.hiprtcGetCodeSize.argtypes = [
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_size_t),
+    ]
+    compiler.hiprtcDestroyProgram.argtypes = [ctypes.POINTER(ctypes.c_void_p)]
+    source = b"""#include <type_traits>
+static_assert(std::is_floating_point<float>::value, "float trait");
+extern "C" __global__ void check(float* x) { x[0] += 1.0f; }
+"""
+    assert (
+        compiler.hiprtcCreateProgram(
+            ctypes.byref(program), source, b"legacy724-header-check.cpp", 0, None, None
+        )
+        == 0
+    )
+    try:
+        options = [
+            b"--gpu-architecture=gfx900",
+            b"-std=c++17",
+            b"-I/usr/include/c++/14",
+            b"-I/usr/include/x86_64-linux-gnu/c++/14",
+            b"-I/usr/include",
+            b"-I/usr/include/x86_64-linux-gnu",
+        ]
+        arguments = (ctypes.c_char_p * len(options))(*options)
+        status = compiler.hiprtcCompileProgram(program, len(options), arguments)
+        size = ctypes.c_size_t()
+        assert compiler.hiprtcGetProgramLogSize(program, ctypes.byref(size)) == 0
+        log = ctypes.create_string_buffer(max(1, size.value))
+        assert compiler.hiprtcGetProgramLog(program, log) == 0
+        assert status == 0, log.value.decode(errors="replace")
+        assert compiler.hiprtcGetCodeSize(program, ctypes.byref(size)) == 0
+        assert size.value > 0
+        return {
+            "hiprtc_compile": "passed",
+            "explicit_target": "gfx900",
+            "code_bytes": size.value,
+            "features_header_sha256": sha256(Path("/usr/include/features.h")),
+            "gpu_devices_exposed": False,
+            "gpu_enumeration_execution": False,
+        }
+    finally:
+        compiler.hiprtcDestroyProgram(ctypes.byref(program))
 
 
 def check_linking() -> dict:
@@ -309,12 +379,16 @@ def check_migrations() -> dict:
 def main() -> None:
     """Run a selected check and print only a secret-free JSON receipt."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("mode", choices=("linking", "migrations"))
+    parser.add_argument("mode", choices=("linking", "migrations", "hiprtc"))
     args = parser.parse_args()
     require_isolation()
     logging.disable(logging.CRITICAL)
     try:
-        result = check_linking() if args.mode == "linking" else check_migrations()
+        result = {
+            "linking": check_linking,
+            "migrations": check_migrations,
+            "hiprtc": check_hiprtc,
+        }[args.mode]()
     except Exception as error:
         # ValidationError can contain camera credentials. Keep the traceback in
         # a private file and emit only the exception type to captured stdout.
