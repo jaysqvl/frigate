@@ -1,0 +1,26 @@
+{
+  "platform": "linux/amd64",
+  "upstream_commit": "5bb2cde8b39b682e5b583f224bd58cc9ea975608",
+  "application_image": "ghcr.io/blakeblackshear/frigate@sha256:d9004df234df7e6ec701d37be4db60610e2c604614cb831bb369067388a6b460",
+  "legacy_runtime_image": "ghcr.io/garymathews/frigate@sha256:4d16caffb39a3d34976828c1a558bca6a9c9067dc7fbd577f9109ba4f7dcefab",
+  "rocm_version": "7.2.4",
+  "migraphx_version": "2.15.0",
+  "python_binding": {
+    "path": "/opt/rocm-7.2.4/lib/migraphx.cpython-311-x86_64-linux-gnu.so",
+    "sha256": "634426e75cd56368f640852bef685ac304ce4f5131812f66ace2c2df4528a514"
+  },
+  "ownership": "Our application adapter and image recipe; Gary's immutable runtime binary remains an external dependency",
+  "gpu_qualification": false,
+  "application_config_digest": "sha256:7176ca7cf0422f0582f2dd59dd9722d19ab31352bc42e58ca15e4ec661fb12a5",
+  "legacy_runtime_config_digest": "sha256:b16fcec2a1cbd8ae48dd3293efae33b3c279fbdb0ae725dc7e109b94be5226da",
+  "external_libraries": {
+    "/usr/lib/x86_64-linux-gnu/libnuma.so.1.0.0": {
+      "source_package": "libnuma1 2.0.19-1",
+      "sha256": "c3c046679e00b24819cc9410f9efb63a402a96ebd7cabf7f787234fc933ced0e"
+    },
+    "/usr/lib/x86_64-linux-gnu/libomp.so.5": {
+      "source_package": "libomp5-19 1:19.1.7-3+b1",
+      "sha256": "822498850962f32c8c967e6c4795aded591c93cc0a2e8d20ad58b04ccba4aea0"
+    }
+  }
+}

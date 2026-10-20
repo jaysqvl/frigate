@@ -1,6 +1,6 @@
 {
   "assessment_date_utc": "2026-10-20",
-  "state": "offline_source_feasibility_only",
+  "state": "linux_image_built_and_offline_cpu_qualified",
   "upstream_dev": "5bb2cde8b39b682e5b583f224bd58cc9ea975608",
   "legacy_frigate": "fdeafe9f4c401644f6acc7389e8f406dd241d068",
   "legacy_reproduction_branch_head": "f0ac7282a1ac16e4989dce303dc8df2f428c01d0",
@@ -13,31 +13,62 @@
     "native_gfx90c": false
   },
   "prototype": {
-    "sha256": "49453875bf3466e02c445be740c5250feefb9e266cb4c0446bb85687997bf9fd",
+    "applied_to_checkout": true,
+    "retired_inert_patch": true,
     "added_python_files": 2,
-    "added_python_lines": 351,
-    "modified_existing_application_files": 0,
-    "applied_to_checkout": false
+    "added_python_lines": 402,
+    "modified_existing_application_files": 0
   },
   "validation": {
-    "cpu_mock_tests_passed": 10,
+    "linux_mock_detector_tests_passed": 10,
+    "linux_upstream_config_migration_tests_passed": 24,
     "ruff_check": "passed",
     "ruff_format": "passed",
-    "git_apply_check": "passed",
-    "upstream_input_transformation_ast_matches_baseline": true,
-    "full_application_tests": false,
-    "linux_binary_linking": false,
-    "image_built": false,
+    "image_built": true,
+    "migraphx_binding_import": true,
+    "full_application_import": true,
+    "inference_link_dependencies_resolve": true,
+    "native_libraries_checked": 39,
+    "inherited_optional_unresolved_components": 4,
+    "new_unresolved_dependencies": 0,
+    "pip_check": "passed",
+    "cpu_onnxruntime_version": "1.30.0",
+    "copied_config_migration": "0.18-0 to 0.19-0",
+    "copied_config_idempotent": true,
+    "model_camera_workload_and_tuning_preserved": true,
+    "copied_database_migrations": [
+      "036_add_recordings_stream_metadata",
+      "037_add_recordings_stream_index",
+      "038_create_notices",
+      "039_add_perf_indexes"
+    ],
+    "all_original_database_rows_and_columns_preserved": true,
+    "database_integrity": "ok",
+    "database_foreign_keys": "ok",
+    "startup_database_backup_matches_original": true,
+    "database_second_init_byte_identical": true,
+    "runtime_uid": 1000,
+    "model_cache_writable": true,
+    "protected_sources_unchanged": true,
+    "gpu_devices_exposed": false,
     "gpu_execution": false,
+    "live_cameras_started": false,
     "nas_contacted": false,
-    "production_changed": false
+    "production_changed": false,
+    "development_changed": false,
+    "github_published": false,
+    "legacy_detector_methods_ast_unchanged_except_constant_logging_syntax": [
+      "__init__",
+      "preprocess",
+      "detect_raw",
+      "optimized_process_yolo",
+      "_process_yolo_e2e",
+      "_process_yolo",
+      "optimized_nms"
+    ]
   },
   "ownership_gaps": [
-    "Exact build provenance of Gary MIGraphX 1.29.0-variant archive",
-    "Unpinned ROCm apt package builds and hashes",
-    "Unhashed 6.3.4 rocBLAS archive",
-    "Unpinned Python-binding source fallback",
-    "Custom ORT wheel removal needs Linux linking/application verification"
+    "Frozen Gary runtime binary is still externally supplied; exact owned-source reproduction remains unverified"
   ],
   "configuration": {
     "model_device": "migraphx:GPU",
@@ -48,5 +79,22 @@
     "tuning_bridge": "FRIGATE_MIGRAPHX_* environment values 0 or 1",
     "dev_recording": false
   },
-  "rocm_10_1_compiler_work": "on_hold"
+  "rocm_10_1_compiler_work": "on_hold",
+  "image": {
+    "tag": "frigate-local:upstream-5bb2cde-rocm724",
+    "id": "sha256:2d1693412060ef1f2cfbe3b2d45e3e5ab5ce46d76c679be6e7d1b216539f33c8",
+    "bytes": 15307091475,
+    "platform": "linux/amd64",
+    "application_assembly": "official pinned upstream standard image plus two restored detector files",
+    "amd_runtime_assembly": "immutable working Gary image; no compiler rebuild"
+  },
+  "cleanup": {
+    "owned_temporary_containers_removed": 11,
+    "input_images_explicitly_removed": 2,
+    "superseded_candidate_already_absent": true,
+    "candidate_image_retained": true,
+    "volumes_deleted": 0,
+    "global_prune": false,
+    "local_build_vm_stopped": true
+  }
 }

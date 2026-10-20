@@ -5,7 +5,6 @@ import importlib.abc
 import os
 import pkgutil
 import shutil
-import subprocess
 import sys
 import tempfile
 import types
@@ -24,9 +23,6 @@ shutil.copytree(
     WORKTREE / "frigate",
     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"),
 )
-prototype = SOURCE_ROOT / "docker/rocm/legacy724/source-prototype.patch"
-for arguments in (["--check", str(prototype)], [str(prototype)]):
-    subprocess.run(["git", "apply", *arguments], cwd=WORKTREE, check=True)
 sys.path.insert(0, str(WORKTREE))
 
 # Optional runtimes are absent on this CPU-only Mac. Never load vendor bindings.
