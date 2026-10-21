@@ -1,5 +1,8 @@
 # Owned Frigate AMD builds
 
+See [QUALIFICATION.md](QUALIFICATION.md) for measured results and outstanding
+hardware acceptance.
+
 One entry point builds two pinned runtimes against the same upstream Frigate
 application image. The application pin is in application-lock.json; AMD source,
 SDK, package, and tool inputs are locked separately.
