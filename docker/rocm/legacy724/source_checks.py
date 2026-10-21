@@ -21,10 +21,12 @@ from offline_checks import (
 
 def check_linking() -> dict:
     """Reject any unresolved native library in the packaged inference closure."""
-    root = Path("/opt/rocm-7.2.4")
-    assert Path("/opt/rocm").resolve() == root
+    root = Path("/opt/rocm").resolve()
     manifest = json.loads((root / "share/frigate/source-build.json").read_text())
     assert not manifest["gpu_qualified"]
+    runtime = manifest["runtime"]["rocm"]
+    assert runtime == os.environ.get("FRIGATE_OFFLINE_EXPECTED_ROCM", "7.2.4")
+    assert root == Path("/opt/rocm-" + runtime).resolve()
     assert manifest["source_lock_sha256"] == sha256(
         root / "share/frigate/source-lock.json"
     )
@@ -46,6 +48,34 @@ def check_linking() -> dict:
         "FRIGATE_MIGRAPHX_FAST_MATH": "1",
         "FRIGATE_MIGRAPHX_EXHAUSTIVE_TUNE": "1",
     }
+    namespace = os.environ.get("FRIGATE_MIGRAPHX_CACHE_NAMESPACE")
+    if namespace:
+        for name in (
+            "MIOPEN_CUSTOM_CACHE_DIR",
+            "MIOPEN_USER_DB_PATH",
+            "AMD_COMGR_CACHE_DIR",
+        ):
+            expected[name] += "/" + namespace
+    if runtime == "10.1.0":
+        expected.pop("HSA_OVERRIDE_GFX_VERSION")
+        expected["FRIGATE_ROCM_NATIVE_GFX90C"] = "1"
+        assert "HSA_OVERRIDE_GFX_VERSION" not in os.environ
+        assert manifest["runtime"]["rocmlir_implementation"] == "classic"
+        assert manifest["runtime"]["rocmlir_dialect_api"] == 6
+        blas = root / "lib/librocblas.so"
+        assert sha256(blas.resolve()) == manifest["rocblas_source_binary_sha256"]
+        assert manifest["rocblas_fatbin_bytes"] >= 1_000_000
+        assert manifest["gfx90c_kernel_files"]
+        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "owned"))
+        from gfx90c_code import inspect_gfx90c_code
+
+        for name in manifest["gfx90c_kernel_files"]:
+            if Path(name).suffix in {".co", ".hsaco"}:
+                inspect_gfx90c_code(root / "lib/rocblas/library" / name)
+        assert (
+            sha256(root / "lib/migraphx/lib/libpython3.11.so.1.0")
+            == manifest["python_shared_runtime_sha256"]
+        )
     assert all(os.environ.get(key) == value for key, value in expected.items())
     assert Path("/usr/include/features.h").is_file()
     assert Path("/usr/include/c++/14").is_dir()
@@ -59,8 +89,14 @@ def check_linking() -> dict:
     assert all(path.is_file() and os.access(path, os.X_OK) for path in helpers)
     checked = []
     relocations_checked = 0
+    library_paths = (
+        root.rglob("*.so*")
+        if runtime == "7.2.4"
+        else list((root / "lib").glob("*.so*"))
+        + list((root / "lib/migraphx/lib").glob("*.so*"))
+    )
     for path in sorted(
-        {path.resolve() for path in root.rglob("*.so*") if path.is_file()}
+        {path.resolve() for path in library_paths if path.is_file()}
         | {path.resolve() for path in helpers}
     ):
         with path.open("rb") as file:
@@ -87,7 +123,7 @@ def check_linking() -> dict:
     import migraphx
     import onnxruntime
 
-    assert Path(migraphx.__file__).resolve() == binding
+    assert Path(migraphx.__file__).resolve() == binding.resolve()
     assert onnxruntime.__version__ == "1.30.0"
     assert "CPUExecutionProvider" in onnxruntime.get_available_providers()
     assert not any(
@@ -103,7 +139,9 @@ def check_linking() -> dict:
     from frigate.detectors.detector_types import api_types
 
     assert FrigateApp is not None and "migraphx" in api_types
-    assert VERSION == "0.19.0-5bb2cde"
+    assert VERSION == os.environ.get(
+        "FRIGATE_OFFLINE_EXPECTED_VERSION", "0.19.0-5bb2cde"
+    )
     pip = subprocess.run(
         [sys.executable, "-m", "pip", "check"], capture_output=True, text=True
     )
@@ -200,8 +238,26 @@ def pack_compile_request(value: str | bool | list | dict) -> bytes:
     raise TypeError("Unsupported compile-request value")
 
 
+def unpack_compile_reply(data: bytes) -> bytes:
+    """Decode 2.18's single-key reply with one binary chunk for this tiny kernel."""
+    # MIGraphX wraps binary data in an array of chunks, even below its 4 GiB
+    # chunk limit. This probe is small enough to require exactly one chunk.
+    prefix = b"\x81\xabcode_object\x91"
+    if not data.startswith(prefix) or len(data) <= len(prefix):
+        raise ValueError("Unexpected HIPRTC driver reply")
+    offset = len(prefix)
+    length_bytes = {0xC4: 1, 0xC5: 2, 0xC6: 4}.get(data[offset])
+    if length_bytes is None or len(data) < offset + 1 + length_bytes:
+        raise ValueError("Missing HIPRTC binary payload length")
+    length = int.from_bytes(data[offset + 1 : offset + 1 + length_bytes], "big")
+    offset += 1 + length_bytes
+    if len(data) != offset + length:
+        raise ValueError("Truncated or trailing HIPRTC binary payload")
+    return data[offset:]
+
+
 def check_helper() -> dict:
-    """Compile through MIGraphX's real helper for explicit gfx900 on the CPU."""
+    """Use each pinned MIGraphX driver's actual protocol without GPU access."""
     request = {
         "srcs": [
             {
@@ -216,29 +272,43 @@ def check_helper() -> dict:
             "-I/usr/include",
             "-I/usr/include/x86_64-linux-gnu",
         ],
-        "arch": "gfx900",
+        "arch": os.environ.get("FRIGATE_OFFLINE_ARCH", "gfx900"),
         "quiet": False,
     }
     with tempfile.TemporaryDirectory(prefix="owned724-helper-") as directory:
         output = Path(directory) / "check.hsaco"
+        stdout_protocol = os.environ.get("FRIGATE_OFFLINE_EXPECTED_ROCM") == "10.1.0"
         result = subprocess.run(
-            [
-                "/opt/rocm/bin/migraphx-hiprtc-driver",
-                str(output),
-            ],
+            ["/opt/rocm/bin/migraphx-hiprtc-driver"]
+            + ([] if stdout_protocol else [str(output)]),
             input=pack_compile_request(request),
             capture_output=True,
             timeout=90,
         )
         assert result.returncode == 0, result.stderr.decode(errors="replace")
-        # This helper can catch an error and return zero without producing code.
-        assert output.is_file(), result.stderr.decode(errors="replace")
-        code = output.read_bytes()
+        if stdout_protocol:
+            code = unpack_compile_reply(result.stdout)
+        else:
+            # The older helper can return zero without producing a code object.
+            assert output.is_file(), result.stderr.decode(errors="replace")
+            code = output.read_bytes()
         assert code[:4] == b"\x7fELF" and code[18:20] == b"\xe0\x00"
+        assert (
+            int.from_bytes(code[48:52], "little") & 0xFF
+            == {
+                "gfx900": 0x2C,
+                "gfx90c": 0x32,
+            }[request["arch"]]
+        )
+        artifact = Path("/tmp/qualified-helper.hsaco")
+        artifact.write_bytes(code)
+        artifact.chmod(0o600)
         return {
             "migraphx_hiprtc_helper": "passed",
-            "explicit_target": "gfx900",
+            "explicit_target": request["arch"],
             "code_bytes": len(code),
+            "code_sha256": sha256(artifact),
+            "protocol": "stdout-msgpack" if stdout_protocol else "output-file",
             "gpu_devices_exposed": False,
             "gpu_enumeration_execution": False,
         }
@@ -252,11 +322,19 @@ def main() -> None:
     )
     args = parser.parse_args()
     require_isolation()
+    for name in (
+        "MIOPEN_CUSTOM_CACHE_DIR",
+        "MIOPEN_USER_DB_PATH",
+        "AMD_COMGR_CACHE_DIR",
+    ):
+        Path(os.environ[name]).mkdir(parents=True, exist_ok=True)
     logging.disable(logging.CRITICAL)
     try:
         result = {
             "linking": check_linking,
-            "hiprtc": check_hiprtc,
+            "hiprtc": lambda: check_hiprtc(
+                os.environ.get("FRIGATE_OFFLINE_ARCH", "gfx900")
+            ),
             "helper": check_helper,
             "reference": check_reference,
             "migrations": check_migrations,

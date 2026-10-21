@@ -1,5 +1,9 @@
 # Owning the legacy runtime build
 
+This records the initial single-profile prototype. The current
+[owned 7.2.4 and 10.1 pipeline](../owned/README.md) provides the common entry
+point, current application pin, and separate offline/hardware acceptance gates.
+
 This work reproduces the documented 7.2.4 compatibility recipe from pinned
 inputs. It does not assert that the new binaries are byte-identical to Gary's
 release archive. Source compilation and offline qualification passed on

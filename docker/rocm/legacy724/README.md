@@ -1,5 +1,9 @@
 # Current Frigate with the frozen ROCm 7.2.4 runtime
 
+This is the historical frozen-binary qualification record. Use the current
+[owned 7.2.4 and 10.1 pipeline](../owned/README.md) for new source builds.
+The versions and hold decisions below describe that earlier experiment.
+
 The separate [source reproduction audit](source-reproduction.md) records the
 owned-build work, every checked Gary compatibility method, and the differences
 from our 10.1 experiments. The source build now passes offline qualification;

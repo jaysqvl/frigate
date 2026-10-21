@@ -90,6 +90,14 @@ class migraphxDetector(DetectionApi):
             logger.warning(f"migraphx: could not set hipSetDeviceFlags: {e}")
 
         cache_dir = Path(MODEL_CACHE_DIR) / "migraphx"
+        cache_namespace = os.environ.get("FRIGATE_MIGRAPHX_CACHE_NAMESPACE", "")
+        if cache_namespace:
+            if Path(cache_namespace).name != cache_namespace or cache_namespace in {
+                ".",
+                "..",
+            }:
+                raise ValueError("Invalid MIGraphX cache namespace")
+            cache_dir /= cache_namespace
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         path = Path(detector_config.model.path)
@@ -105,7 +113,7 @@ class migraphxDetector(DetectionApi):
             logger.info(f"migraphx: loading compiled model from cache {mxr_cache_path}")
             self.model = migraphx.load(str(mxr_cache_path))
 
-        elif mxr_path.exists():
+        elif not cache_namespace and mxr_path.exists():
             logger.info(f"migraphx: loading compiled model from {mxr_path}")
             self.model = migraphx.load(str(mxr_path))
 

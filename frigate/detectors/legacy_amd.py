@@ -28,6 +28,12 @@ def apply_amd_compatibility_env_vars():
     for gfx_ids, vars in configs.items():
         if gfx_id in gfx_ids:
             for var, value in vars.items():
+                if (
+                    var == "HSA_OVERRIDE_GFX_VERSION"
+                    and gfx_id == "gfx90c"
+                    and os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") == "1"
+                ):
+                    continue
                 if var not in os.environ:
                     os.environ[var] = value
                     logger.info(f'  - "{var}={value}"')

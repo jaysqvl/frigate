@@ -96,6 +96,7 @@ class TestLegacySourceCompatibility(unittest.TestCase):
         self.addCleanup(environment.stop)
         for option in ("CONSERVE_CPU", "FAST_MATH", "EXHAUSTIVE_TUNE"):
             os.environ.pop(f"FRIGATE_MIGRAPHX_{option}", None)
+        os.environ.pop("FRIGATE_MIGRAPHX_CACHE_NAMESPACE", None)
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
         self.root = Path(self.directory.name)
@@ -177,6 +178,31 @@ class TestLegacySourceCompatibility(unittest.TestCase):
             self.assertTrue(config.fast_math)
             self.assertTrue(config.exhaustive_tune)
 
+    def test_native_gfx90c_keeps_sdma_disabled_without_spoofing(self):
+        with (
+            patch.dict(os.environ, {"FRIGATE_ROCM_NATIVE_GFX90C": "1"}, clear=True),
+            patch.object(legacy_amd, "detect_amd_gfx_id", return_value="gfx90c"),
+        ):
+            legacy_amd.apply_amd_compatibility_env_vars()
+            self.assertEqual(os.environ["HSA_ENABLE_SDMA"], "0")
+            self.assertNotIn("HSA_OVERRIDE_GFX_VERSION", os.environ)
+            self.assertEqual(os.environ["MIGRAPHX_DISABLE_MIOPEN_FUSION"], "1")
+
+    def test_native_profile_preserves_an_explicit_architecture_override(self):
+        with (
+            patch.dict(
+                os.environ,
+                {
+                    "FRIGATE_ROCM_NATIVE_GFX90C": "1",
+                    "HSA_OVERRIDE_GFX_VERSION": "9.0.0",
+                },
+                clear=True,
+            ),
+            patch.object(legacy_amd, "detect_amd_gfx_id", return_value="gfx90c"),
+        ):
+            legacy_amd.apply_amd_compatibility_env_vars()
+            self.assertEqual(os.environ["HSA_OVERRIDE_GFX_VERSION"], "9.0.0")
+
     def test_invalid_profile_setting_is_rejected_before_initialization(self):
         with patch.dict(os.environ, {"FRIGATE_MIGRAPHX_EXHAUSTIVE_TUNE": "maybe"}):
             with self.assertRaisesRegex(ValueError, "must be 0 or 1"):
@@ -228,6 +254,20 @@ class TestLegacySourceCompatibility(unittest.TestCase):
         fake.load.assert_called_once()
         program.compile.assert_not_called()
         fake.parse_onnx.assert_not_called()
+
+    def test_runtime_namespace_ignores_other_runtime_and_adjacent_caches(self):
+        (self.root / "yolo26s-distill_320_tune.mxr").touch()
+        with patch.dict(os.environ, {"FRIGATE_MIGRAPHX_CACHE_NAMESPACE": "owned101"}):
+            _, fake, program = self.construct(cached=True)
+        fake.load.assert_not_called()
+        program.compile.assert_called_once()
+        destination = self.root / "migraphx/owned101/yolo26s-distill_320_tune.mxr"
+        self.assertEqual(fake.save.call_args.args[1], str(destination))
+
+    def test_cache_namespace_cannot_escape_its_directory(self):
+        with patch.dict(os.environ, {"FRIGATE_MIGRAPHX_CACHE_NAMESPACE": "../other"}):
+            with self.assertRaisesRegex(ValueError, "cache namespace"):
+                self.construct()
 
     def test_detect_raw_preserves_nchw_values_and_e2e_box_order(self):
         detector, _, program = self.construct()

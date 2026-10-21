@@ -33,9 +33,10 @@ def sha256(path: Path) -> str:
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def check_hiprtc() -> dict:
-    """Compile for explicit gfx900 on the CPU, without enumerating a GPU."""
+def check_hiprtc(architecture: str = "gfx900") -> dict:
+    """Compile for an explicit target on the CPU, without enumerating a GPU."""
     require_isolation()
+    assert architecture in {"gfx900", "gfx90c"}
     assert Path("/usr/include/features.h").is_file()
     compiler = ctypes.CDLL("/opt/rocm/lib/libhiprtc.so")
     program = ctypes.c_void_p()
@@ -74,7 +75,7 @@ extern "C" __global__ void check(float* x) { x[0] += 1.0f; }
     )
     try:
         options = [
-            b"--gpu-architecture=gfx900",
+            f"--gpu-architecture={architecture}".encode(),
             b"-std=c++17",
             b"-I/usr/include/c++/14",
             b"-I/usr/include/x86_64-linux-gnu/c++/14",
@@ -92,7 +93,7 @@ extern "C" __global__ void check(float* x) { x[0] += 1.0f; }
         assert size.value > 0
         return {
             "hiprtc_compile": "passed",
-            "explicit_target": "gfx900",
+            "explicit_target": architecture,
             "code_bytes": size.value,
             "features_header_sha256": sha256(Path("/usr/include/features.h")),
             "gpu_devices_exposed": False,
