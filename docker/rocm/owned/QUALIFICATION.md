@@ -82,3 +82,12 @@ actual five-camera workload with recording disabled. The test harness enforces
 SDMA=0 and rejects an inherited gfx900 override in native mode. No GPU reset or
 NAS reboot is part of the test flow. Offline success alone does not establish
 GPU safety, correctness, speed or production readiness.
+
+The private hardware-window coordinator passed 18 CPU-only fault simulations:
+preflight rejection, successful completion, test failure, timeout, partial
+original-service shutdown, unconfirmed test shutdown, failed original-service
+restart, and failed health/API readiness. It preserves failed-test exit codes
+and refuses to restart the originals beside an unconfirmed running test.
+A separate real GNU timeout check terminated a TERM-ignoring child. The
+simulations use fake Docker/API responses and accelerated readiness deadlines;
+they do not prove real GPU containment, restoration time or driver recovery.
