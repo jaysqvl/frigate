@@ -1,5 +1,11 @@
 # Current Frigate with the frozen ROCm 7.2.4 runtime
 
+The separate [source reproduction audit](source-reproduction.md) records the
+owned-build work, every checked Gary compatibility method, and the differences
+from our 10.1 experiments. The source build now passes offline qualification;
+its GPU trial is pending. The live results below apply to the existing frozen
+binary runtime.
+
 Live development qualification completed on 2026-10-20. Upstream Frigate
 `0.19.0-5bb2cde` runs with the frozen MIGraphX 2.15.0 / ROCm 7.2.4 runtime and
 Gary's direct detector on a Ryzen 7 5700G. The same YOLO26s distilled 320px model
@@ -31,10 +37,11 @@ The Dockerfile assembles two immutable inputs recorded in `runtime-lock.json`:
    Frigate application, frontend, init services, and custom ORT wheel are not
    copied. The image retains upstream CPU ONNX Runtime 1.30.0.
 
-The build does not rebuild AMD compilers. We own the application adapter and
-container assembly. Gary's runtime binary remains an external dependency pinned
-by immutable image digest. Reproducing that dependency from our own source build
-is separate ownership work, with the existing source-provenance gap still open.
+This binary-layer build does not rebuild AMD compilers. We own the application
+adapter and container assembly. Gary's runtime binary remains an external
+dependency pinned by immutable image digest. Reproducing it from our own source build
+is separate ownership work. That reproduction now passes offline checks, while
+the exact historical provenance of Gary's archive remains unestablished.
 
 | Maintained file | Responsibility |
 | --- | --- |

@@ -1,0 +1,94 @@
+# syntax=docker/dockerfile:1.4@sha256:9ba7531bd80fb0a858632727cf7a112fbfd19b17e94c4e84ced81e24ef1a0dbc
+# Fetch the source-lock.json inputs before building with --network none.
+ARG SDK_IMAGE=rocm/dev-ubuntu-22.04@sha256:a50a8547101ac9e7c35848ff609a56335214b789b468c9eb05dcd006a4a38c25
+ARG BINDING_IMAGE=debian@sha256:a4672c0cb26fbdde88e38fa2dfb6c681942306680e41e4378b28770b6e79ee91
+ARG FRIGATE_IMAGE=ghcr.io/blakeblackshear/frigate@sha256:d9004df234df7e6ec701d37be4db60610e2c604614cb831bb369067388a6b460
+FROM ${SDK_IMAGE} AS source-build
+
+COPY docker/rocm/legacy724/source_inputs.py /recipes/source_inputs.py
+COPY docker/rocm/legacy724/source-lock.json /recipes/source-lock.json
+RUN --network=none --mount=type=bind,source=inputs/sdk,target=/inputs/sdk \
+    python3 /recipes/source_inputs.py verify \
+        --lock /recipes/source-lock.json --root /inputs --group sdk \
+    && dpkg --unpack /inputs/sdk/*.deb \
+    && dpkg --configure --pending \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/rocm/legacy724/build_source.sh /recipes/build_source.sh
+ARG BUILD_JOBS=2
+RUN --network=none --mount=type=cache,id=frigate724-07ef4ba-6671a1e,target=/work \
+    --mount=type=bind,source=inputs/sources,target=/inputs/sources \
+    python3 /recipes/source_inputs.py verify \
+        --lock /recipes/source-lock.json --root /inputs --group source --group tool --group legacy-kernels \
+    && BUILD_JOBS=${BUILD_JOBS} /bin/bash /recipes/build_source.sh
+
+FROM source-build AS runtime-files
+COPY docker/rocm/legacy724/assemble_runtime.py /recipes/assemble_runtime.py
+RUN --network=none --mount=type=bind,source=inputs/sources,target=/inputs/sources \
+    python3 /recipes/assemble_runtime.py
+
+FROM ${BINDING_IMAGE} AS binding-build
+COPY docker/rocm/legacy724/source_inputs.py /recipes/source_inputs.py
+COPY docker/rocm/legacy724/source-lock.json /recipes/source-lock.json
+COPY --from=source-build /opt/owned-deps/share/frigate/binding-inputs.sha256 /recipes/binding-inputs.sha256
+RUN --network=none --mount=type=bind,source=inputs/binding,target=/inputs/binding \
+    cd /inputs && sha256sum -c /recipes/binding-inputs.sha256 \
+    && apt-get -y --no-install-recommends \
+        -o Dir::Etc::sourcelist=/dev/null -o Dir::Etc::sourceparts=- \
+        install /inputs/binding/*.deb \
+    && python3 /recipes/source_inputs.py verify \
+        --lock /recipes/source-lock.json --root /inputs --group binding \
+    && rm -rf /var/lib/apt/lists/*
+# The binding links host libraries only. Kernel bundles and MIOpen databases
+# go directly to the final image instead of being duplicated in this builder.
+COPY --from=runtime-files /runtime/opt/rocm-7.2.4/lib/migraphx/ /opt/rocm-7.2.4/lib/migraphx/
+COPY --from=runtime-files /runtime/opt/rocm-7.2.4/lib/*.so* /opt/rocm-7.2.4/lib/
+COPY --from=runtime-files /runtime/opt/rocm-7.2.4/include/ /opt/rocm-7.2.4/include/
+RUN --network=none ln -s rocm-7.2.4 /opt/rocm
+COPY docker/rocm/legacy724/CMakeLists.source.txt /recipes/CMakeLists.source.txt
+COPY docker/rocm/legacy724/build_binding.sh /recipes/build_binding.sh
+ARG BUILD_JOBS=2
+RUN --network=none --mount=type=bind,source=inputs/sources,target=/inputs/sources \
+    python3 /recipes/source_inputs.py verify \
+        --lock /recipes/source-lock.json --root /inputs --group source \
+    && BUILD_JOBS=${BUILD_JOBS} /bin/bash /recipes/build_binding.sh
+
+FROM binding-build AS runtime-root
+COPY --from=runtime-files /runtime/opt/rocm-7.2.4/share/frigate/ /metadata/
+COPY docker/rocm/legacy724/runtime-os-lock.json /recipes/runtime-os-lock.json
+COPY docker/rocm/legacy724/assemble_os.sh /recipes/assemble_os.sh
+RUN --network=none --mount=type=bind,source=inputs/runtime-os,target=/inputs/runtime-os \
+    python3 /recipes/source_inputs.py verify \
+        --lock /recipes/runtime-os-lock.json --root /inputs --group runtime-os \
+    && /bin/bash /recipes/assemble_os.sh
+
+FROM ${FRIGATE_IMAGE} AS frigate-owned724
+USER root
+COPY --from=runtime-files /runtime/ /
+COPY --from=binding-build /opt/rocm-7.2.4/lib/migraphx.cpython-311-x86_64-linux-gnu.so /opt/rocm-7.2.4/lib/
+COPY --from=runtime-root /runtime/ /
+ENV HSA_ENABLE_SDMA=0 \
+    HSA_OVERRIDE_GFX_VERSION=9.0.0 \
+    MIGRAPHX_DISABLE_MIOPEN_FUSION=1 \
+    MIGRAPHX_DISABLE_SCHEDULE_PASS=1 \
+    MIGRAPHX_DISABLE_REDUCE_FUSION=1 \
+    MIGRAPHX_ENABLE_HIPRTC_WORKAROUNDS=1 \
+    MIOPEN_CUSTOM_CACHE_DIR=/config/model_cache/migraphx \
+    MIOPEN_USER_DB_PATH=/config/model_cache/migraphx \
+    AMD_COMGR_CACHE=1 \
+    AMD_COMGR_CACHE_DIR=/config/model_cache/migraphx \
+    FRIGATE_MIGRAPHX_CONSERVE_CPU=1 \
+    FRIGATE_MIGRAPHX_FAST_MATH=1 \
+    FRIGATE_MIGRAPHX_EXHAUSTIVE_TUNE=1
+RUN --network=none test ! -e /opt/rocm \
+    && ln -s rocm-7.2.4 /opt/rocm \
+    && printf '/opt/rocm/lib\n/opt/rocm/lib/migraphx/lib\n' > /etc/ld.so.conf.d/rocm-legacy724.conf \
+    && ldconfig
+WORKDIR /opt/frigate
+COPY frigate/detectors/plugins/migraphx.py frigate/detectors/plugins/migraphx.py
+COPY frigate/detectors/legacy_amd.py frigate/detectors/legacy_amd.py
+RUN --network=none python3 -m compileall -q frigate/detectors/plugins/migraphx.py frigate/detectors/legacy_amd.py
+LABEL org.opencontainers.image.source="https://github.com/jaysqvl/frigate" \
+    io.jaysqvl.frigate.upstream="5bb2cde8b39b682e5b583f224bd58cc9ea975608" \
+    io.jaysqvl.frigate.runtime="source-built-rocm-7.2.4-migraphx-2.15.0-gfx900" \
+    io.jaysqvl.frigate.qualification="requires-offline-and-gpu-validation"

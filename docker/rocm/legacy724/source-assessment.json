@@ -1,0 +1,144 @@
+{
+  "schema_version": 1,
+  "checked_on_utc": "2026-10-21",
+  "status": "offline-qualified; GPU trial pending",
+  "production_and_development_changed": false,
+  "deployed": false,
+  "gpu_qualified": false,
+  "full_model_gpu_compilation_or_inference_tested": false,
+  "performance_tested": false,
+  "frigate": {
+    "version": "0.19.0-5bb2cde",
+    "upstream_commit": "5bb2cde8b39b682e5b583f224bd58cc9ea975608",
+    "image": "ghcr.io/blakeblackshear/frigate@sha256:d9004df234df7e6ec701d37be4db60610e2c604614cb831bb369067388a6b460",
+    "application_delta": "The existing two added direct-detector adapter files; no new application edits"
+  },
+  "runtime": {
+    "rocm": "7.2.4",
+    "migraphx": "2.15.0",
+    "classic_rocmlir": "2.0.0",
+    "rocmlir_dialect_api": 4,
+    "onednn": "1.8.1",
+    "gfx900_rocblas_kernels": "6.3.4",
+    "python_binding_abi": "cp311",
+    "cpu_onnxruntime": "1.30.0",
+    "official_amd_package_dependencies": [
+      "HIP",
+      "HIPRTC",
+      "AMD COMGR",
+      "HSA runtime",
+      "MIOpen",
+      "rocBLAS",
+      "hipBLASLt"
+    ],
+    "full_rocm_sdk_certified": false
+  },
+  "source": {
+    "amd_migraphx_commit": "07ef4ba4f9ef95d241b7be165e60ad148f3344ee",
+    "equivalent_gary_src_tree": "56a22f66ece4c729743ac590ce82fdcd8d506dab",
+    "gary_recipe_commit": "b7057cc3a8460f7bcea15ec20f2c1b4940a4b5ef",
+    "rocmlir_commit": "6671a1ee31d44e1f2f7743a26a71ffc4ce9169bf",
+    "gary_release_binary_exact_provenance": "not established",
+    "gary_image_or_archive_binaries_consumed": false,
+    "source_lock_sha256": "325380b3a9f2e08c59aff27cc466b03c8d5fc26ec9a173d85c292bcd2f7e01ad",
+    "runtime_os_lock_sha256": "3b49fc4829563e9ee1503cd19f7238cbfeb110ebffc90a16fa2a8a3cc2436198"
+  },
+  "build": {
+    "initial_llvm_work": "CPU-only Linux AMD64 VM",
+    "completion_host": "CPU-only Linux AMD64 NAS",
+    "stages": "Bounded source and binding containers, followed by the public Dockerfile final stage",
+    "single_command_full_dockerfile_repeated": false,
+    "compile_jobs_final": 12,
+    "cpuset": "2-7,10-15",
+    "reserved_cpus": "0,1,8,9",
+    "memory_limit_bytes": 12884901888,
+    "compile_network": "none",
+    "gpu_devices_exposed": false,
+    "gpu_targets": [
+      "gfx900",
+      "gfx908",
+      "gfx90a",
+      "gfx942",
+      "gfx950",
+      "gfx1030",
+      "gfx1100",
+      "gfx1101",
+      "gfx1200",
+      "gfx1201"
+    ],
+    "enabled_backends": [
+      "CPU",
+      "GPU",
+      "MLIR",
+      "MIOpen",
+      "rocBLAS",
+      "hipBLASLt",
+      "ComposableKernel"
+    ]
+  },
+  "output": {
+    "image_id": "sha256:cf33fe1444469b48b3d25c1802c147f698cf51c99cf36e519148222567534fff",
+    "image_tag": "frigate-local:owned724-source-20261021",
+    "binding_sha256": "48d8977553907f53972cebe621badcf656ca4c432ee76e5c7bd97fad3dd191e2",
+    "runtime_archive_sha256": "6d629fc7eba32df1cb5687b0a6b1dd100de8083c36c12d65ac6d910ece8e2745",
+    "runtime_archive_bytes": 1595615787,
+    "archive_integrity_check": "passed; SHA256 matches the Linux and local copies"
+  },
+  "qualification": {
+    "native_libraries_and_helpers_checked": 30,
+    "native_symbol_relocation_checks": 29,
+    "missing_native_libraries": 0,
+    "undefined_native_symbols": 0,
+    "binding_and_application_imports": "passed",
+    "pip_check": "passed",
+    "raw_hiprtc_explicit_gfx900": "passed",
+    "native_migraphx_hiprtc_helper_explicit_gfx900": "passed",
+    "cpu_reference_arithmetic": "passed",
+    "onednn_cpu_arithmetic": "passed",
+    "real_model_parser": "passed",
+    "model_sha256": "6c2662cd56393e30041cc67ca14b18c20388d7234ebd159b3eb998ec5371197e",
+    "model_input_shape": [
+      1,
+      3,
+      320,
+      320
+    ],
+    "model_output_shape": [
+      1,
+      300,
+      6
+    ],
+    "config_migration": "0.18-0 -> 0.19-0",
+    "camera_workloads_preserved": 5,
+    "recording_enabled": false,
+    "schema_migrations_applied": [
+      "036_add_recordings_stream_metadata",
+      "037_add_recordings_stream_index",
+      "038_create_notices",
+      "039_add_perf_indexes"
+    ],
+    "old_columns_rows_and_login_records_preserved": true,
+    "database_integrity": "ok",
+    "database_foreign_keys": "ok",
+    "exact_backup_and_migration_idempotence": "passed",
+    "original_private_backup_unchanged": true,
+    "uid": 1000,
+    "network": "none",
+    "host_mounts": 0,
+    "gpu_devices_exposed": false,
+    "config_tests": 24,
+    "adapter_tests": 10,
+    "input_lock_tests": 4,
+    "source_lint_and_shell_syntax": "passed"
+  },
+  "cleanup": {
+    "owned_nas_containers_removed": 8,
+    "superseded_owned_candidate_images_removed": 1,
+    "duplicate_runtime_staging_directories_removed": 2,
+    "build_prerequisites_compiler_cache_prefix_and_accepted_candidate": "retained intentionally",
+    "protected_runtime_archive": "preserved outside Docker on both hosts",
+    "local_build_vm": "stopped; restored to 2 CPUs; task swap removed",
+    "rocm_10_1_experiments": "both worktrees archived; commits and private evidence retained",
+    "github_publication": false
+  }
+}
