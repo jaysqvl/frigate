@@ -158,9 +158,13 @@ namespace and enables `MIGRAPHX_TRACE_BENCHMARKING=1`. The backend saves complet
 tuning choices during tracing and omits unfinished marks when writing this
 cache. This makes interrupted model tuning resumable beyond MIOpen's own cache.
 These environment settings are recorded in the result and do not change
-fast-math, exhaustive tuning or CPU scheduling. The older 2.15 backend's cache
-format retains unfinished marks, so the harness leaves its existing MIOpen
-cache behavior unchanged. It rejects conflicting inherited native options.
+fast-math, exhaustive tuning or CPU scheduling. The older 2.15 backend uses
+`MIGRAPHX_PROBLEM_CACHE` in the same private namespace. Its JSON format retains
+unfinished null markers, so the harness validates that format and atomically
+removes only those markers before constructing the detector. Completed choices
+are preserved. The result records the before/after hashes and counts. This
+cleanup happens after the interrupted cache's hash is verified. Conflicting
+inherited cache paths or tracing options are rejected.
 
 This saves completed tuning choices after benchmarking starts. The compiler
 first generates the batch of candidate kernels in memory. Interrupting that

@@ -8,6 +8,7 @@ import argparse
 import hashlib
 import json
 import os
+import tempfile
 import time
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,22 +54,52 @@ def validate_resume(cache: Path, receipt: dict, namespace: str, model_hash: str)
         raise ValueError("Interrupted initialization receipt or cache differs")
 
 
-def configure_tuning_cache(cache: Path) -> dict[str, str]:
-    """Persist native 2.18 tuning choices across bounded test windows.
+def sanitize_legacy_tuning_cache(path: Path) -> dict | None:
+    """Retain completed 2.15 choices and drop only unfinished null markers."""
+    if path.is_symlink():
+        raise ValueError("A legacy tuning cache must not be a symlink")
+    if not path.exists():
+        return None
+    before = sha256(path)
+    rows = json.loads(path.read_text())
+    if not isinstance(rows, list) or any(
+        not isinstance(row, list)
+        or len(row) != 2
+        or not isinstance(row[0], dict)
+        or set(row[0]) != {"name", "problem"}
+        or not isinstance(row[0]["name"], str)
+        or not row[0]["name"]
+        for row in rows
+    ):
+        raise ValueError("Unexpected legacy tuning-cache format")
+    completed = [row for row in rows if row[1] is not None]
+    removed = len(rows) - len(completed)
+    if removed:
+        payload = json.dumps(completed, indent=2, allow_nan=False) + "\n"
+        with tempfile.NamedTemporaryFile(
+            mode="w", dir=path.parent, prefix=".problem-cache-", delete=False
+        ) as temporary:
+            temporary.write(payload)
+            temporary_path = Path(temporary.name)
+        temporary_path.replace(path)
+    return {
+        "sha256_before": before,
+        "sha256_after": sha256(path),
+        "unfinished_marks_removed": removed,
+        "completed_choices_retained": len(completed),
+    }
 
-    The pinned 2.18 backend saves completed choices during benchmark tracing.
-    Its JSON cache omits incomplete marks. The older 2.15 format retains those
-    marks, so leave that backend's existing MIOpen cache behavior unchanged.
-    """
-    if os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") != "1":
-        return {}
-    settings = {
-        "MIGRAPHX_GPU_OPTIONS": json.dumps(
+
+def configure_tuning_cache(cache: Path) -> dict[str, str]:
+    """Persist each pinned backend's choices in its private runtime namespace."""
+    settings = {"MIGRAPHX_TRACE_BENCHMARKING": "1"}
+    if os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") == "1":
+        settings["MIGRAPHX_GPU_OPTIONS"] = json.dumps(
             {"problem_cache_files": [str(cache.parent / "problems.json")]},
             separators=(",", ":"),
-        ),
-        "MIGRAPHX_TRACE_BENCHMARKING": "1",
-    }
+        )
+    else:
+        settings["MIGRAPHX_PROBLEM_CACHE"] = str(cache.parent / "problems.json")
     for key, value in settings.items():
         if key in os.environ and os.environ[key] != value:
             raise ValueError(f"Unexpected qualification setting: {key}")
@@ -327,6 +358,11 @@ def gpu(args) -> None:
             manifest["model_sha256"],
             sha256(args.reference / "manifest.json"),
         )
+    tuning_cache_maintenance = None
+    if os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") != "1":
+        tuning_cache_maintenance = sanitize_legacy_tuning_cache(
+            cache.parent / "problems.json"
+        )
     tuning_cache_environment = configure_tuning_cache(cache)
     model = ModelConfig(
         path=str(args.model),
@@ -426,6 +462,7 @@ def gpu(args) -> None:
             "cache_policy": args.cache_policy,
             "initialization_history": initialization_history,
             "tuning_cache_environment": tuning_cache_environment,
+            "legacy_tuning_cache_maintenance": tuning_cache_maintenance,
             "compiled_program_sha256": sha256(graph),
             "hip_device_flags": flags.value,
             "compile_or_load_seconds": load_seconds,
