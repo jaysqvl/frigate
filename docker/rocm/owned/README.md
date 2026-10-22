@@ -1,7 +1,7 @@
 # Owned Frigate AMD builds
 
-See [QUALIFICATION.md](QUALIFICATION.md) for measured results and outstanding
-hardware acceptance.
+See [QUALIFICATION.md](QUALIFICATION.md) for measured build, target-GPU and
+camera-workload results and their limits.
 
 One entry point builds two pinned runtimes against the same upstream Frigate
 application image. The application pin is in application-lock.json; AMD source,
@@ -176,6 +176,13 @@ When staging private artifacts for a restricted container, extract them with
 the container user's ownership while retaining private file modes. Host-side
 tar extraction can otherwise preserve a client UID that the container cannot
 read after capabilities are dropped.
+
+When generating a configuration copy, emit block YAML rather than JSON text
+inside a .yaml file. In the pinned application, the latter passes Frigate's
+parser but causes its restream generator to emit flow-style YAML that bundled
+go2rtc cannot parse. A device-free, network-isolated check reproduced zero
+registered streams for that format and all eight streams for semantically
+identical block YAML. Copying existing YAML preserves this distinction.
 
 ## What remains to maintain
 
