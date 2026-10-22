@@ -76,6 +76,24 @@ def configure_tuning_cache(cache: Path) -> dict[str, str]:
     return settings
 
 
+def validate_warm(
+    cache: Path, receipt: dict, namespace: str, model_hash: str, reference_hash: str
+):
+    """Require a successful cold correctness result before timing its cache."""
+    if (
+        receipt.get("passed") is not True
+        or receipt.get("cache_policy") not in {"cold", "resume-cold"}
+        or receipt.get("model_sha256") != model_hash
+        or receipt.get("reference_manifest_sha256") != reference_hash
+        or receipt.get("cache_namespace") != namespace
+        or receipt.get("hip_device_flags") != 4
+        or receipt.get("tuning")
+        != {"conserve_cpu": True, "fast_math": True, "exhaustive_tune": True}
+        or receipt.get("cache_sha256") != sha256(cache)
+    ):
+        raise ValueError("Warm timing requires the matching passed cold result")
+
+
 def compare_detections(expected: np.ndarray, actual: np.ndarray) -> dict:
     """Match confident detections by class and geometry, allowing rank changes.
 
@@ -302,9 +320,13 @@ def gpu(args) -> None:
         if not args.cold_receipt:
             raise ValueError("Warm qualification requires the prior cold receipt")
         prior = json.loads(args.cold_receipt.read_text())
-        assert prior["model_sha256"] == manifest["model_sha256"]
-        assert prior["cache_namespace"] == namespace
-        assert prior["cache_sha256"] == sha256(cache)
+        validate_warm(
+            cache,
+            prior,
+            namespace,
+            manifest["model_sha256"],
+            sha256(args.reference / "manifest.json"),
+        )
     tuning_cache_environment = configure_tuning_cache(cache)
     model = ModelConfig(
         path=str(args.model),
