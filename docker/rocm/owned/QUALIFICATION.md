@@ -1,8 +1,9 @@
-# Qualification record, 2026-10-21 UTC
+# Qualification record, 2026-10-22 UTC
 
-Both source pipelines pass offline qualification. Hardware qualification is
-pending. Neither candidate has been deployed or accepted for GPU inference.
-The production and existing development services retain their original builds.
+Both source pipelines pass offline qualification and the small target-GPU
+numerical checks. Full-model hardware qualification and performance comparison
+remain incomplete. The production and existing development services retain
+their original builds.
 
 The common upstream pin is 91e91c68efe504e17b7fd3fb437b34068b4387ca,
 application version 0.19.0-91e91c6. The build implementation is local commit
@@ -76,14 +77,14 @@ The 10.1 profile deliberately uses classic rocMLIR API 6. It does not qualify or
 fix the standard 10.1 ONNX Runtime provider's Triton compiler. Neither profile
 is certification of the entire ROCm SDK or every GPU/model combination.
 
-Remaining acceptance is staged target-GPU execution, full-model correctness,
+Remaining acceptance is full-model correctness,
 cold/warm cache reloads, isolated balanced performance measurements, and the
 actual five-camera workload with recording disabled. The test harness enforces
 SDMA=0 and rejects an inherited gfx900 override in native mode. No GPU reset or
 NAS reboot is part of the test flow. Offline success alone does not establish
 GPU safety, correctness, speed or production readiness.
 
-The private hardware-window coordinator passed 18 CPU-only fault simulations:
+The private hardware-window coordinator passed 21 CPU-only fault simulations:
 preflight rejection, successful completion, test failure, timeout, partial
 original-service shutdown, unconfirmed test shutdown, failed original-service
 restart, and failed health/API readiness. It preserves failed-test exit codes
@@ -91,3 +92,48 @@ and refuses to restart the originals beside an unconfirmed running test.
 A separate real GNU timeout check terminated a TERM-ignoring child. The
 simulations use fake Docker/API responses and accelerated readiness deadlines;
 they do not prove real GPU containment, restoration time or driver recovery.
+
+## Initial target-GPU tests
+
+The same application pin, YOLO26s-distilled model and 19-input corpus were used
+for both owned builds and a Gary-runtime control. Conserve CPU, fast math and
+exhaustive tuning stayed enabled. The control uses Gary's existing runtime
+with the common newer application, rather than a different application version.
+Each test used logical CPUs 2-7,10-15, 12 GiB memory, isolated private caches,
+SDMA disabled, and exclusive access to the target iGPU while the original
+services were stopped. No recording array was mounted.
+
+| GPU check | Gary control | Owned 7.2.4 | Native 10.1 |
+| --- | --- | --- | --- |
+| HIP one-element kernel, 41 to 42, scheduling flag 4 | Passed | Passed | Passed |
+| FP32 64x64 SGEMM, maximum absolute error | 5.72e-6 | 5.72e-6 | 5.72e-6 |
+| Tiny convolution, maximum absolute error | 1.91e-6 | 9.54e-7 | 1.91e-6 |
+| Full YOLO26s GPU output comparison | Incomplete | Incomplete | Incomplete |
+| Qualified warm model latency | Unmeasured | Unmeasured | Unmeasured |
+
+Thirteen bounded windows were restored, totaling 3,186 seconds including
+shutdown/restoration time. The longest controller receipt was 272 seconds.
+The first Gary window failed a file-ownership prerequisite before constructing
+the full-model detector; CPU-only reproduction confirmed that staging issue
+and it was corrected. Six subsequent Gary attempts, four owned 7.2.4 attempts,
+and two native 10.1 attempts hit the initialization deadline. No full-model
+GPU result passed, and no latency percentage is supported by these tests.
+
+MIOpen tuning made persistent progress. Once that setup was cached, the Gary
+control's convolution-compile pass took about 1.7 seconds. It then remained in
+MLIR candidate-kernel generation for the rest of the window without reaching
+kernel benchmarking. That attempt added no compiler-cache files; only MIOpen
+find-cache records changed. Pinned source confirms the compile manager builds
+the candidate batch before benchmarking, with those code objects held in
+memory. Stopping this stage prevents useful progress toward a completed model.
+Longer first initialization, or a separately justified compilation strategy,
+is needed before the balanced warm comparison can run. This is an initial
+compilation finding and does not establish steady-state inference performance.
+
+The original service images, definitions and mounts were preserved. Both
+services and all five cameras were verified running after the final window,
+with development recording disabled. No GPU reset or reboot was performed;
+the boot ID stayed unchanged and the recorded kernel-log check found no new
+matching critical GPU/kernel errors. Actual five-camera candidate trials and
+the balanced warm benchmark have not run. Candidate GPU-qualified flags remain
+false.

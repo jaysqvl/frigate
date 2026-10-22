@@ -162,6 +162,12 @@ fast-math, exhaustive tuning or CPU scheduling. The older 2.15 backend's cache
 format retains unfinished marks, so the harness leaves its existing MIOpen
 cache behavior unchanged. It rejects conflicting inherited native options.
 
+This saves completed tuning choices after benchmarking starts. The compiler
+first generates the batch of candidate kernels in memory. Interrupting that
+stage loses its unfinished work; preserving MIOpen and problem-choice caches
+alone cannot make an arbitrarily short initialization window sufficient.
+Allow enough time for that first compilation before measuring warm inference.
+
 When staging private artifacts for a restricted container, extract them with
 the container user's ownership while retaining private file modes. Host-side
 tar extraction can otherwise preserve a client UID that the container cannot
