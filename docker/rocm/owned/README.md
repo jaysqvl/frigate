@@ -138,6 +138,25 @@ fresh --output directory. Repeat in a new process with --cache-policy warm and
 runtime namespace, private caches and tuning controls. The result records the
 compiled program, numerical comparisons, cache hash and every latency sample.
 
+Exhaustive initial tuning can exceed a short maintenance window. Preserve only
+that runtime's private cache and record the interrupted attempt before stopping
+it. `--cache-policy resume-cold --cold-receipt /private/interrupted.json` accepts
+an interrupted-initialization receipt with `state: incomplete-cold`, matching
+`model_sha256` and `cache_namespace`, `initial_cache_empty_verified: true`, a
+nonempty `attempts` history, and `cache_tree_sha256` from `cache_tree_sha256()`.
+The receipt must describe an initial attempt that passed the empty-cache guard;
+never assert that origin for an inherited cache. Resumption verifies the entire
+private cache before constructing the detector and retains the history in its
+result. Model correctness checks and timing settings remain unchanged. Report
+these as interrupted/resumed initialization, separately from a single fresh
+cold-start timing. A resumed successful result can supply the subsequent warm
+test's `--cold-receipt`.
+
+When staging private artifacts for a restricted container, extract them with
+the container user's ownership while retaining private file modes. Host-side
+tar extraction can otherwise preserve a client UID that the container cannot
+read after capabilities are dropped.
+
 ## What remains to maintain
 
 Ordinary Frigate updates require merging upstream, resolving the two direct

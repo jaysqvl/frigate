@@ -27,6 +27,32 @@ def save_json(path: Path, value: dict) -> None:
     path.chmod(0o600)
 
 
+def cache_tree_sha256(root: Path) -> str:
+    """Identify an interrupted runtime's private tuning cache exactly."""
+    records = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("A qualification cache must not contain symlinks")
+        if path.is_file():
+            records.append([str(path.relative_to(root)), sha256(path)])
+    return hashlib.sha256(
+        json.dumps(records, separators=(",", ":")).encode()
+    ).hexdigest()
+
+
+def validate_resume(cache: Path, receipt: dict, namespace: str, model_hash: str):
+    """Resume bounded cold initialization using only that attempt's cache."""
+    if (
+        receipt.get("state") != "incomplete-cold"
+        or receipt.get("cache_namespace") != namespace
+        or receipt.get("model_sha256") != model_hash
+        or receipt.get("initial_cache_empty_verified") is not True
+        or not receipt.get("attempts")
+        or receipt.get("cache_tree_sha256") != cache_tree_sha256(cache.parent)
+    ):
+        raise ValueError("Interrupted initialization receipt or cache differs")
+
+
 def compare_detections(expected: np.ndarray, actual: np.ndarray) -> dict:
     """Match confident detections by class and geometry, allowing rank changes.
 
@@ -236,11 +262,19 @@ def gpu(args) -> None:
     cache = (
         Path(MODEL_CACHE_DIR) / "migraphx" / namespace / (args.model.stem + "_tune.mxr")
     )
+    initialization_history = None
     if args.cache_policy == "cold":
         if cache.parent.exists() and any(cache.parent.iterdir()):
             raise ValueError(
                 "Cold qualification requires an empty private cache directory"
             )
+    elif args.cache_policy == "resume-cold":
+        if not args.cold_receipt:
+            raise ValueError("Resuming requires the interrupted cold receipt")
+        initialization_history = json.loads(args.cold_receipt.read_text())
+        validate_resume(
+            cache, initialization_history, namespace, manifest["model_sha256"]
+        )
     else:
         if not args.cold_receipt:
             raise ValueError("Warm qualification requires the prior cold receipt")
@@ -344,6 +378,7 @@ def gpu(args) -> None:
             "cache_namespace": namespace,
             "cache_sha256": sha256(cache),
             "cache_policy": args.cache_policy,
+            "initialization_history": initialization_history,
             "compiled_program_sha256": sha256(graph),
             "hip_device_flags": flags.value,
             "compile_or_load_seconds": load_seconds,
@@ -381,7 +416,9 @@ def main() -> None:
     parser.add_argument("--allow-gpu", action="store_true")
     parser.add_argument("--migraphx-cpu", action="store_true")
     parser.add_argument("--min-confident-detections", type=int, default=1)
-    parser.add_argument("--cache-policy", choices=("cold", "warm"), default="cold")
+    parser.add_argument(
+        "--cache-policy", choices=("cold", "resume-cold", "warm"), default="cold"
+    )
     parser.add_argument("--cold-receipt", type=Path)
     parser.add_argument("--warmups", type=int, default=20)
     parser.add_argument("--iterations", type=int, default=100)
