@@ -53,6 +53,29 @@ def validate_resume(cache: Path, receipt: dict, namespace: str, model_hash: str)
         raise ValueError("Interrupted initialization receipt or cache differs")
 
 
+def configure_tuning_cache(cache: Path) -> dict[str, str]:
+    """Persist native 2.18 tuning choices across bounded test windows.
+
+    The pinned 2.18 backend saves completed choices during benchmark tracing.
+    Its JSON cache omits incomplete marks. The older 2.15 format retains those
+    marks, so leave that backend's existing MIOpen cache behavior unchanged.
+    """
+    if os.environ.get("FRIGATE_ROCM_NATIVE_GFX90C") != "1":
+        return {}
+    settings = {
+        "MIGRAPHX_GPU_OPTIONS": json.dumps(
+            {"problem_cache_files": [str(cache.parent / "problems.json")]},
+            separators=(",", ":"),
+        ),
+        "MIGRAPHX_TRACE_BENCHMARKING": "1",
+    }
+    for key, value in settings.items():
+        if key in os.environ and os.environ[key] != value:
+            raise ValueError(f"Unexpected qualification setting: {key}")
+    os.environ.update(settings)
+    return settings
+
+
 def compare_detections(expected: np.ndarray, actual: np.ndarray) -> dict:
     """Match confident detections by class and geometry, allowing rank changes.
 
@@ -282,6 +305,7 @@ def gpu(args) -> None:
         assert prior["model_sha256"] == manifest["model_sha256"]
         assert prior["cache_namespace"] == namespace
         assert prior["cache_sha256"] == sha256(cache)
+    tuning_cache_environment = configure_tuning_cache(cache)
     model = ModelConfig(
         path=str(args.model),
         labelmap_path=str(args.labelmap),
@@ -379,6 +403,7 @@ def gpu(args) -> None:
             "cache_sha256": sha256(cache),
             "cache_policy": args.cache_policy,
             "initialization_history": initialization_history,
+            "tuning_cache_environment": tuning_cache_environment,
             "compiled_program_sha256": sha256(graph),
             "hip_device_flags": flags.value,
             "compile_or_load_seconds": load_seconds,

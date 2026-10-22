@@ -152,6 +152,16 @@ these as interrupted/resumed initialization, separately from a single fresh
 cold-start timing. A resumed successful result can supply the subsequent warm
 test's `--cold-receipt`.
 
+For the pinned native 2.18 runtime, the GPU harness also configures
+`MIGRAPHX_GPU_OPTIONS` with a writable `problems.json` inside that same private
+namespace and enables `MIGRAPHX_TRACE_BENCHMARKING=1`. The backend saves completed
+tuning choices during tracing and omits unfinished marks when writing this
+cache. This makes interrupted model tuning resumable beyond MIOpen's own cache.
+These environment settings are recorded in the result and do not change
+fast-math, exhaustive tuning or CPU scheduling. The older 2.15 backend's cache
+format retains unfinished marks, so the harness leaves its existing MIOpen
+cache behavior unchanged. It rejects conflicting inherited native options.
+
 When staging private artifacts for a restricted container, extract them with
 the container user's ownership while retaining private file modes. Host-side
 tar extraction can otherwise preserve a client UID that the container cannot
