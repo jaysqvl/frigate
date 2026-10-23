@@ -104,8 +104,8 @@ fi
 docker inspect "$boot_id" > "$output/boot-healthy.json"
 cat "$output/boot.json"
 docker stop --time 60 "$boot_id" > /dev/null
-docker inspect --format '{{json .State}}' "$boot_id" | python3 -c '
-import json, sys
-state = json.load(sys.stdin)
-assert state["Status"] == "exited" and state["ExitCode"] == 0 and not state["OOMKilled"], state
-'
+docker logs "$boot_id" > "$output/boot.log" 2>&1
+docker inspect "$boot_id" > "$output/boot-after.json"
+python3 "$checks/smoke.py" --shutdown "$output/boot-after.json" "$output/boot.log" \
+    > "$output/shutdown.log"
+cat "$output/shutdown.log"

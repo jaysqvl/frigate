@@ -38,6 +38,7 @@ jobs:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
           python3 -m unittest discover -s docker/rocm-owned -p test_runtimes.py -v
+          python3 -m unittest discover -s docker/rocm-owned -p test_smoke.py -v
           python3 docker/rocm-owned/runtimes.py check
           bash -n docker/rocm-owned/check-image.sh
       - name: Check adapter, cache invalidation, and config migration without devices

@@ -242,8 +242,36 @@ def migrations(source_root: Path = Path("/opt/frigate")):
     }
 
 
+def validate_shutdown(state: dict, log: str) -> dict:
+    """Require a clean Frigate service exit after a normal Docker stop."""
+    assert state["Status"] == "exited" and not state["OOMKilled"], state
+    # Auxiliary s6 services may propagate Docker's normal SIGTERM as 143.
+    # Frigate must still finish successfully, and a forced kill is rejected.
+    assert state["ExitCode"] in (0, 143), state
+    exits = list(
+        re.finditer(r"Service Frigate exited with code (\d+) \(by signal (\d+)\)", log)
+    )
+    assert exits and exits[-1].groups() == ("0", "0"), log
+    assert "s6-rc: info: service frigate successfully stopped" in log[exits[-1].end() :]
+    return {
+        "graceful_service_shutdown": "passed",
+        "frigate_exit_code": 0,
+        "container_exit_code": state["ExitCode"],
+    }
+
+
 def main():
     """Require device-free checks before publishing an application image."""
+    parser = argparse.ArgumentParser(description=__doc__)
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--boot", action="store_true")
+    modes.add_argument("--shutdown", nargs=2, metavar=("INSPECT", "LOG"), type=Path)
+    args = parser.parse_args()
+    if args.shutdown:
+        inspect_path, log_path = args.shutdown
+        state = json.loads(inspect_path.read_text())[0]["State"]
+        print(json.dumps(validate_shutdown(state, log_path.read_text())))
+        return
     assert not Path("/dev/kfd").exists() and not Path("/dev/dri").exists()
     assert os.environ["FRIGATE_OFFLINE_CHECK"] == "1"
     assert os.environ["HSA_ENABLE_SDMA"] == "0"
@@ -251,9 +279,6 @@ def main():
     manifest = json.loads(Path("/usr/share/frigate-rocm/runtime.json").read_text())
     assert manifest["profile"] == os.environ["FRIGATE_ROCM_PROFILE"]
     assert manifest["gpu_tested"] is False
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--boot", action="store_true")
-    args = parser.parse_args()
     if args.boot:
         from frigate.version import VERSION
 
