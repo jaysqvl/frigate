@@ -93,9 +93,9 @@ def linking():
     import migraphx
     import onnxruntime
 
+    from frigate import version
     from frigate.app import FrigateApp
     from frigate.detectors.detector_types import api_types
-    from frigate.version import VERSION
 
     assert Path(migraphx.__file__).resolve() == binding
     assert "migraphx" in api_types and FrigateApp is not None
@@ -104,14 +104,14 @@ def linking():
         "MIGraphX" in value for value in onnxruntime.get_available_providers()
     )
     source_commit = os.environ["FRIGATE_SOURCE_COMMIT"]
-    version_commit = VERSION.rsplit("-", 1)[-1]
+    version_commit = version.VERSION.rsplit("-", 1)[-1]
     assert re.fullmatch(r"[0-9a-f]{40}", source_commit)
     assert re.fullmatch(r"[0-9a-f]{7,40}", version_commit)
-    assert source_commit.startswith(version_commit), (VERSION, source_commit)
+    assert source_commit.startswith(version_commit), (version.VERSION, source_commit)
     return {
         "native_libraries_checked": checked,
         "binding_application_import": "passed",
-        "frigate_version": VERSION,
+        "frigate_version": version.VERSION,
         "frigate_source_commit": source_commit,
     }
 
