@@ -1,0 +1,123 @@
+{
+  "schema": 1,
+  "repository": "jaysqvl/AMDMIGraphX",
+  "release": "runtime-v0.1.5",
+  "profiles": {
+    "rocm-7.2.4": {
+      "image": "ghcr.io/jaysqvl/frigate-runtime-rocm-7.2.4@sha256:60cffd43ec1b96f50b262fa2b9d2b001d328109a30531580cb0ab60a803974d3",
+      "source_commit": "feb7d84bf3b0bae5e17960db5b799de95d3fb295",
+      "runtime_recipe_sha256": "22bc84f4ff83410dc1e3432b87e2539ad6da71ebfd7a2e3bf07a15810e714273",
+      "configuration": {
+        "recipe": "legacy724",
+        "kind": "724",
+        "rocm": "7.2.4",
+        "python_abi": "cp311",
+        "gpu_targets": [
+          "gfx900",
+          "gfx908",
+          "gfx90a",
+          "gfx942",
+          "gfx950",
+          "gfx1030",
+          "gfx1100",
+          "gfx1101",
+          "gfx1200",
+          "gfx1201"
+        ],
+        "cpu_arch": "x86-64-v2",
+        "legacy_rocblas": false,
+        "hipblaslt": true,
+        "composable_kernel": true,
+        "status": "experimental",
+        "description": "ROCm 7.2.4 with Gary's broad MIGraphX target set and legacy gfx900 kernel data",
+        "hipblaslt_targets": [
+          "gfx908",
+          "gfx90a",
+          "gfx942",
+          "gfx950",
+          "gfx1100",
+          "gfx1101",
+          "gfx1200",
+          "gfx1201"
+        ]
+      },
+      "metadata_sha256": "082af7344ba2f8df89ffe541de241228a7cf6cb5b2c0bedba21925bed0e14524"
+    },
+    "rocm-10.1-gfx90c": {
+      "image": "ghcr.io/jaysqvl/frigate-runtime-rocm-10.1-gfx90c@sha256:1d81b2cf486b39612002cefe99f07afa27b72f65831b7336f62cce4864c132f1",
+      "source_commit": "feb7d84bf3b0bae5e17960db5b799de95d3fb295",
+      "runtime_recipe_sha256": "25f424f39b8b6f18be468bdde85b391051f043428447ddcbc39b2c399910a6a4",
+      "configuration": {
+        "recipe": "native101",
+        "kind": "101",
+        "rocm": "10.1.0",
+        "python_abi": "cp311",
+        "gpu_targets": [
+          "gfx90c"
+        ],
+        "cpu_arch": "x86-64-v2",
+        "legacy_rocblas": true,
+        "hipblaslt": false,
+        "composable_kernel": false,
+        "status": "experimental",
+        "description": "Native gfx90c compatibility profile based on the qualified Ryzen 7 5700G recipe",
+        "hipblaslt_targets": []
+      },
+      "metadata_sha256": "7fb2a3ca9f79bc19d7410aefc1f3d3ff2eba12e5d8527861b79118f2caa7f9d8"
+    },
+    "rocm-10.1-vega": {
+      "image": "ghcr.io/jaysqvl/frigate-runtime-rocm-10.1-vega@sha256:63fa7bf793c0c1541a9223af4f0fdacca0302c0fc41a7353e97e65ae3b7c7c66",
+      "source_commit": "feb7d84bf3b0bae5e17960db5b799de95d3fb295",
+      "runtime_recipe_sha256": "2037c1b546171a6b1c9a6d5b349e1672141956858858d8f2d9acf17752dd2f2c",
+      "configuration": {
+        "recipe": "native101",
+        "kind": "101",
+        "rocm": "10.1.0",
+        "python_abi": "cp311",
+        "gpu_targets": [
+          "gfx900",
+          "gfx906",
+          "gfx90c"
+        ],
+        "cpu_arch": "x86-64-v2",
+        "legacy_rocblas": true,
+        "hipblaslt": false,
+        "composable_kernel": false,
+        "status": "experimental",
+        "description": "Source-built legacy rocBLAS for Vega 10, Vega 20, and native gfx90c APUs",
+        "hipblaslt_targets": []
+      },
+      "metadata_sha256": "482e04ddedb6ba9f3a2ac28df92cf789b040a1aa1b30e57ef0f4117e6b46cccb"
+    },
+    "rocm-10.1": {
+      "image": "ghcr.io/jaysqvl/frigate-runtime-rocm-10.1@sha256:8b49fdfecffd8cab2233e77165c0f4d24b3ced68e790831ddbb1823a185a6e0c",
+      "source_commit": "feb7d84bf3b0bae5e17960db5b799de95d3fb295",
+      "runtime_recipe_sha256": "ae24a479937067b12b57e054f74575a9268bc7e9216b8cc95eb70b48d32059d5",
+      "configuration": {
+        "recipe": "native101",
+        "kind": "101",
+        "rocm": "10.1.0",
+        "python_abi": "cp311",
+        "gpu_targets": [
+          "gfx1100",
+          "gfx1101",
+          "gfx1200",
+          "gfx1201"
+        ],
+        "cpu_arch": "x86-64-v2",
+        "legacy_rocblas": false,
+        "hipblaslt": true,
+        "composable_kernel": false,
+        "status": "experimental",
+        "description": "RDNA 3 and RDNA 4 profile using the standard AMD SDK rocBLAS and hipBLASLt libraries",
+        "hipblaslt_targets": [
+          "gfx1100",
+          "gfx1101",
+          "gfx1200",
+          "gfx1201"
+        ]
+      },
+      "metadata_sha256": "4eca10b2c198d48f9980f5184967c07e4ccb0fdae21dc1540fec68b99dff5396"
+    }
+  }
+}

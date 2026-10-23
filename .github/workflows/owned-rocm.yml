@@ -1,0 +1,203 @@
+name: Owned ROCm images
+
+on:
+  push:
+    branches: [main]
+    tags: [frigate-v*]
+    paths-ignore: ['docs/**', '**.md']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional experimental GitHub Release tag (frigate-vVERSION)
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: owned-rocm-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: docker/rocm-owned/requirements-test.txt
+      - name: Validate runtime pins and image selection
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m unittest discover -s docker/rocm-owned -p test_runtimes.py -v
+          python3 docker/rocm-owned/runtimes.py check
+          bash -n docker/rocm-owned/check-image.sh
+      - name: Check adapter, cache invalidation, and config migration without devices
+        env:
+          PYTHONDONTWRITEBYTECODE: '1'
+        run: |
+          python3 -m pip install -r docker/rocm-owned/requirements-test.txt
+          python3 docker/rocm-owned/test_plugin.py --with-config-tests
+
+  base:
+    needs: checks
+    if: github.repository == 'jaysqvl/frigate' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ghcr.io/jaysqvl/frigate@${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Prepare version and disposable runner space
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
+          make version
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 2
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build this Frigate checkout once for all runtime profiles
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          file: docker/main/Dockerfile
+          target: frigate
+          platforms: linux/amd64
+          push: true
+          tags: ghcr.io/jaysqvl/frigate:base-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/jaysqvl/frigate
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=registry,ref=ghcr.io/jaysqvl/frigate:cache-owned-base
+          cache-to: type=registry,ref=ghcr.io/jaysqvl/frigate:cache-owned-base,mode=max
+
+  images:
+    needs: base
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [rocm-7.2.4, rocm-10.1-gfx90c, rocm-10.1-vega, rocm-10.1]
+    env:
+      PROFILE: ${{ matrix.profile }}
+      BASE_IMAGE: ${{ needs.base.outputs.image }}
+      IMAGE: ghcr.io/jaysqvl/frigate:${{ github.sha }}-${{ matrix.profile }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Generate pinned image inputs
+        run: |
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/local/share/powershell
+          make version
+          mkdir -p tmp/owned-rocm
+          python3 docker/rocm-owned/runtimes.py bake --profile "$PROFILE" \
+            --base-image "$BASE_IMAGE" --tag "$IMAGE" > tmp/owned-rocm/bake.json
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Add the independently built runtime
+        uses: docker/bake-action@59cb1203cd42bcefd40a1b6d73b589e48c86040e # v7
+        with:
+          source: .
+          files: |
+            docker/rocm-owned/docker-bake.hcl
+            tmp/owned-rocm/bake.json
+          targets: frigate-rocm
+          load: true
+      - name: Check linking, compiler helpers, migration, and service startup
+        run: bash docker/rocm-owned/check-image.sh "$IMAGE" tmp/owned-rocm/checks
+      - name: Publish only after offline application checks passed
+        run: |
+          docker push "$IMAGE"
+          docker image inspect "$IMAGE" > tmp/owned-rocm/image.json
+          python3 - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          profile = os.environ['PROFILE']
+          image = json.loads(Path('tmp/owned-rocm/image.json').read_text())[0]
+          lock = json.loads(Path('docker/rocm-owned/runtime-lock.json').read_text())
+          result = {'source_commit': os.environ['GITHUB_SHA'],
+                    'base_image': os.environ['BASE_IMAGE'], 'profile': profile,
+                    'image_id': image['Id'], 'image_digests': image['RepoDigests'],
+                    'runtime': lock['profiles'][profile], 'gpu_tested': False,
+                    'check_logs': {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+                                   for p in Path('tmp/owned-rocm/checks').glob('*.log')}}
+          Path(f'tmp/owned-rocm/{profile}.json').write_text(json.dumps(result, indent=2) + '\n')
+          PY
+      - name: Preserve image and migration evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: frigate-${{ matrix.profile }}
+          path: tmp/owned-rocm/
+          retention-days: 14
+
+  publish:
+    needs: images
+    runs-on: ubuntu-24.04
+    permissions:
+      packages: write
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+    steps:
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Advance experimental tags after every profile passed
+        run: |
+          for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
+            docker buildx imagetools create --tag "ghcr.io/jaysqvl/frigate:experimental-$profile" \
+              "ghcr.io/jaysqvl/frigate:$GITHUB_SHA-$profile"
+          done
+      - name: Publish an explicitly requested experimental source release
+        if: env.RELEASE_TAG != ''
+        run: |
+          [[ "$RELEASE_TAG" =~ ^frigate-v[0-9][A-Za-z0-9._-]*$ ]]
+          mkdir -p tmp/release
+          gh run download "$GITHUB_RUN_ID" --pattern 'frigate-*' --dir tmp/evidence
+          for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
+            cp "tmp/evidence/frigate-$profile/$profile.json" tmp/release/
+          done
+          cat > tmp/notes.md <<'EOF'
+          Frigate built from this release's source commit with independently pinned AMD runtimes. The four manifests identify image digests, runtime sources and recipes, and the offline application check logs.
+
+          These images are experimental. Linking, explicit-target compiler helpers, the detector adapter and config/database migration passed without GPU access or production data. Hardware validation remains separate. This workflow does not deploy Frigate.
+          EOF
+          gh release create "$RELEASE_TAG" tmp/release/*.json --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" --notes-file tmp/notes.md --prerelease
