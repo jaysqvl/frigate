@@ -14,9 +14,16 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-SOURCE_ROOT = Path(
-    os.environ.get("FRIGATE_TEST_SOURCE_ROOT", Path(__file__).resolve().parents[2])
-)
+
+def source_root() -> Path:
+    """Use mounted image sources before resolving checkout-relative defaults."""
+    source = os.environ.get("FRIGATE_TEST_SOURCE_ROOT")
+    if source:
+        return Path(source)
+    return Path(__file__).resolve().parents[2]
+
+
+SOURCE_ROOT = source_root()
 _workspace = tempfile.TemporaryDirectory(prefix="frigate-migraphx-tests-")
 atexit.register(_workspace.cleanup)
 WORKTREE = Path(_workspace.name)
@@ -92,6 +99,15 @@ class FakeArgument(np.ndarray):
 
 
 class TestLegacySourceCompatibility(unittest.TestCase):
+    def test_source_override_does_not_inspect_mounted_script_path(self):
+        with (
+            patch.dict(os.environ, {"FRIGATE_TEST_SOURCE_ROOT": "/opt/frigate"}),
+            patch.object(
+                Path, "resolve", side_effect=AssertionError("Source fallback inspected")
+            ),
+        ):
+            self.assertEqual(source_root(), Path("/opt/frigate"))
+
     def test_sdma_is_set_before_hsa_discovery(self):
         def discover():
             self.assertEqual(os.environ.get("HSA_ENABLE_SDMA"), "0")

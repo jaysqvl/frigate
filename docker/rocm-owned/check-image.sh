@@ -54,12 +54,12 @@ check() {
     docker inspect "$id" > "$output/$name-before.json"
     docker start --attach "$id" > "$output/$name.log" 2>&1 || true
     docker inspect "$id" > "$output/$name-after.json"
+    cat "$output/$name.log"
     docker inspect --format '{{json .State}}' "$id" | python3 -c '
 import json, sys
 state = json.load(sys.stdin)
 assert state["Status"] == "exited" and state["ExitCode"] == 0 and not state["OOMKilled"], state
 '
-    cat "$output/$name.log"
 }
 check runtime -u /checks/smoke.py
 check adapter -u /checks/test_plugin.py
