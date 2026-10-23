@@ -1,0 +1,8 @@
+# Startup fixture used only inside a CI container with no network or GPU devices.
+mqtt:
+  enabled: false
+auth:
+  enabled: false
+record:
+  enabled: false
+cameras: {}
