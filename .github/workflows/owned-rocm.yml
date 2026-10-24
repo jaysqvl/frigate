@@ -220,8 +220,6 @@ jobs:
               '.source_commit == $sha and .profile == $profile and (.image_digests | length == 1)' "$manifest" > /dev/null
             image=$(jq -er '.image_digests[0]' "$manifest")
             [[ "$image" =~ ^ghcr\.io/jaysqvl/frigate@sha256:[a-f0-9]{64}$ ]] || exit 1
-            docker buildx imagetools create --prefer-index=false \
-              --tag "ghcr.io/jaysqvl/frigate:${RELEASE_TAG#frigate-v}-$profile" "$image"
             cp "$manifest" tmp/release/
             printf '| `%s` | `ghcr.io/jaysqvl/frigate:%s-%s` | `%s` |\n' \
               "$profile" "${RELEASE_TAG#frigate-v}" "$profile" "$image" >> tmp/notes.md
@@ -230,8 +228,15 @@ jobs:
 
           The four attached manifests record runtime sources, image digests and check-log hashes. These are development prereleases. Linking, explicit-target compiler helpers, the detector adapter, config/database migration and service startup passed without GPU access or production data. CI does not certify every supported GPU; hardware validation remains separate.
           EOF
+          # Reserve the release before tagging images so duplicate names fail safely.
           gh release create "$RELEASE_TAG" tmp/release/*.json --target "$GITHUB_SHA" \
-            --title "$RELEASE_TAG" --notes-file tmp/notes.md --generate-notes --prerelease
+            --title "$RELEASE_TAG" --notes-file tmp/notes.md --generate-notes --prerelease --draft
+          for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
+            image=$(jq -er '.image_digests[0]' "tmp/release/$profile.json")
+            docker buildx imagetools create --prefer-index=false \
+              --tag "ghcr.io/jaysqvl/frigate:${RELEASE_TAG#frigate-v}-$profile" "$image"
+          done
+          gh release edit "$RELEASE_TAG" --draft=false
           printf 'Published [source release](https://github.com/%s/releases/tag/%s) and four versioned images.\n' \
             "$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
       - name: Advance update channels for the current main release
