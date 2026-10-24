@@ -180,8 +180,13 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Advance experimental tags after every profile passed
+      - name: Advance experimental tags for the current main commit
         run: |
+          main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+          if [ "$GITHUB_REF" != refs/heads/main ] || [ "$main" != "$GITHUB_SHA" ]; then
+            echo 'Published commit images; experimental tags stay on the current main build.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
             docker buildx imagetools create --tag "ghcr.io/jaysqvl/frigate:experimental-$profile" \
               "ghcr.io/jaysqvl/frigate:$GITHUB_SHA-$profile"
