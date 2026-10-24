@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Optional experimental GitHub Release tag (frigate-vVERSION)
+        description: Optional release tag override (otherwise generated automatically)
         type: string
         required: false
 
@@ -173,37 +173,78 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+      REQUESTED_RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Advance experimental tags for the current main commit
+      - name: Select the source release
+        id: release
+        run: |
+          main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
+          if [ -z "$REQUESTED_RELEASE_TAG" ] && { [ "$GITHUB_REF" != refs/heads/main ] || [ "$main" != "$GITHUB_SHA" ]; }; then
+            echo 'Published commit images; automatic releases require the current main commit.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          version=$(awk '$1 == "VERSION" && $2 == "=" { print $3; exit }' Makefile)
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          tag=${REQUESTED_RELEASE_TAG:-frigate-v$version-dev.$GITHUB_RUN_NUMBER.$GITHUB_RUN_ATTEMPT}
+          [[ "$tag" =~ ^frigate-v[0-9][A-Za-z0-9._-]*$ ]] || exit 1
+          # Release and image tags have the same registry-compatible limit.
+          [ "${#tag}" -le 100 ]
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Publish versioned images and their source release
+        if: steps.release.outputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          mkdir -p tmp/release
+          gh run download "$GITHUB_RUN_ID" --pattern 'frigate-*' --dir tmp/evidence
+          cat > tmp/notes.md <<EOF
+          Frigate built from [\`$GITHUB_SHA\`](https://github.com/$GH_REPO/commit/$GITHUB_SHA) with independently pinned AMD runtimes.
+
+          Run **Sync upstream and build** for the next upstream update, or **Owned ROCm images** to rebuild the pinned source. A successful current-main build advances the corresponding \`latest-<profile>\` tags. Unraid/Docker pulls those tags when you choose to update; publishing does not restart a deployment.
+
+          | Profile | Versioned image | Exact image |
+          | --- | --- | --- |
+          EOF
+          for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
+            manifest="tmp/evidence/frigate-$profile/$profile.json"
+            jq -e --arg sha "$GITHUB_SHA" --arg profile "$profile" \
+              '.source_commit == $sha and .profile == $profile and (.image_digests | length == 1)' "$manifest" > /dev/null
+            image=$(jq -er '.image_digests[0]' "$manifest")
+            [[ "$image" =~ ^ghcr\.io/jaysqvl/frigate@sha256:[a-f0-9]{64}$ ]] || exit 1
+            docker buildx imagetools create --prefer-index=false \
+              --tag "ghcr.io/jaysqvl/frigate:${RELEASE_TAG#frigate-v}-$profile" "$image"
+            cp "$manifest" tmp/release/
+            printf '| `%s` | `ghcr.io/jaysqvl/frigate:%s-%s` | `%s` |\n' \
+              "$profile" "${RELEASE_TAG#frigate-v}" "$profile" "$image" >> tmp/notes.md
+          done
+          cat >> tmp/notes.md <<'EOF'
+
+          The four attached manifests record runtime sources, image digests and check-log hashes. These are development prereleases. Linking, explicit-target compiler helpers, the detector adapter, config/database migration and service startup passed without GPU access or production data. CI does not certify every supported GPU; hardware validation remains separate.
+          EOF
+          gh release create "$RELEASE_TAG" tmp/release/*.json --target "$GITHUB_SHA" \
+            --title "$RELEASE_TAG" --notes-file tmp/notes.md --generate-notes --prerelease
+          printf 'Published [source release](https://github.com/%s/releases/tag/%s) and four versioned images.\n' \
+            "$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
+      - name: Advance update channels for the current main release
+        if: steps.release.outputs.tag != ''
         run: |
           main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
           if [ "$GITHUB_REF" != refs/heads/main ] || [ "$main" != "$GITHUB_SHA" ]; then
-            echo 'Published commit images; experimental tags stay on the current main build.' >> "$GITHUB_STEP_SUMMARY"
+            echo 'The release is available; update channels stay on the current main build.' >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
-            docker buildx imagetools create --tag "ghcr.io/jaysqvl/frigate:experimental-$profile" \
-              "ghcr.io/jaysqvl/frigate:$GITHUB_SHA-$profile"
+            image=$(jq -er '.image_digests[0]' "tmp/release/$profile.json")
+            docker buildx imagetools create --prefer-index=false \
+              --tag "ghcr.io/jaysqvl/frigate:latest-$profile" \
+              --tag "ghcr.io/jaysqvl/frigate:experimental-$profile" "$image"
           done
-      - name: Publish an explicitly requested experimental source release
-        if: env.RELEASE_TAG != ''
-        run: |
-          [[ "$RELEASE_TAG" =~ ^frigate-v[0-9][A-Za-z0-9._-]*$ ]]
-          mkdir -p tmp/release
-          gh run download "$GITHUB_RUN_ID" --pattern 'frigate-*' --dir tmp/evidence
-          for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
-            cp "tmp/evidence/frigate-$profile/$profile.json" tmp/release/
-          done
-          cat > tmp/notes.md <<'EOF'
-          Frigate built from this release's source commit with independently pinned AMD runtimes. The four manifests identify image digests, runtime sources and recipes, and the offline application check logs.
-
-          These images are experimental. Linking, explicit-target compiler helpers, the detector adapter and config/database migration passed without GPU access or production data. Hardware validation remains separate. This workflow does not deploy Frigate.
-          EOF
-          gh release create "$RELEASE_TAG" tmp/release/*.json --target "$GITHUB_SHA" \
-            --title "$RELEASE_TAG" --notes-file tmp/notes.md --prerelease

@@ -4,6 +4,30 @@
 
 # Frigate NVR™ - Realtime Object Detection for IP Cameras
 
+## AMD ROCm builds in this fork
+
+This community fork tracks upstream Frigate `dev` with independently built
+MIGraphX runtimes. Choose an image for your GPU, then either follow its `latest`
+tag or copy a fixed version from [Releases](https://github.com/jaysqvl/frigate/releases).
+
+| Runtime and GPU profile | Image that tracks updates |
+| --- | --- |
+| ROCm 7.2.4, broad legacy and modern targets | `ghcr.io/jaysqvl/frigate:latest-rocm-7.2.4` |
+| ROCm 10.1, RDNA 3/4 | `ghcr.io/jaysqvl/frigate:latest-rocm-10.1` |
+| ROCm 10.1, Vega 10/20 and gfx90c APUs | `ghcr.io/jaysqvl/frigate:latest-rocm-10.1-vega` |
+| ROCm 10.1, focused gfx90c APU build (including Ryzen 7 5700G) | `ghcr.io/jaysqvl/frigate:latest-rocm-10.1-gfx90c` |
+
+Set the chosen image as your Unraid **Repository** or Compose `image`. Apply
+updates through your usual container manager. Every successful current-main
+build publishes a development release with four versioned images, exact digests,
+and build evidence. CI checks run without a GPU; hardware coverage is documented
+in the [build and configuration guide](docker/rocm-owned/README.md).
+
+To update this fork, run [Sync upstream and build](https://github.com/jaysqvl/frigate/actions/workflows/sync-upstream.yml)
+on `main`. It tests the upstream merge, builds all four images, publishes the
+release, and advances the update tags. Running containers update when you choose
+to apply the new image.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 <a href="https://hosted.weblate.org/engage/frigate-nvr/">
