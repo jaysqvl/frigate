@@ -1,0 +1,78 @@
+name: Sync upstream and build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  GH_REPO: ${{ github.repository }}
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  SYNC_BRANCH: sync/upstream-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  prepare:
+    if: github.repository == 'jaysqvl/frigate' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.merge.outputs.commit }}
+      branch_created: ${{ steps.merge.outputs.branch_created }}
+    steps:
+      - name: Sync the upstream mirror and prepare a merge on a temporary branch
+        id: merge
+        run: |
+          gh repo sync "$GH_REPO" --branch dev
+          upstream=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq .object.sha)
+          gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f "ref=refs/heads/$SYNC_BRANCH" -f "sha=$GITHUB_SHA" --silent
+          # Record the branch before merging so failed merges can clean it up too.
+          echo "branch_created=true" >> "$GITHUB_OUTPUT"
+          gh api --method POST "repos/$GH_REPO/merges" \
+            -f "base=$SYNC_BRANCH" -f "head=$upstream" \
+            -f 'commit_message=Merge upstream Frigate dev' --silent
+          commit=$(gh api "repos/$GH_REPO/git/ref/heads/$SYNC_BRANCH" --jq .object.sha)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          printf 'Upstream: `%s`\n\nCandidate: `%s`\n' "$upstream" "$commit" >> "$GITHUB_STEP_SUMMARY"
+
+  checks:
+    needs: prepare
+    uses: ./.github/workflows/pull_request.yml
+    with:
+      source_ref: ${{ needs.prepare.outputs.commit }}
+
+  update:
+    needs: [prepare, checks]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      actions: write
+    env:
+      SOURCE_COMMIT: ${{ needs.prepare.outputs.commit }}
+    steps:
+      - name: Advance main only after the existing upstream checks pass
+        run: |
+          gh api --method PATCH "repos/$GH_REPO/git/refs/heads/main" \
+            -f "sha=$SOURCE_COMMIT" -F force=false --silent
+      - name: Run the existing four-profile image build
+        run: |
+          # GITHUB_TOKEN pushes do not trigger push workflows, so dispatch explicitly.
+          gh workflow run owned-rocm.yml --repo "$GH_REPO" --ref main
+          printf 'Updated main to `%s`. Follow [Owned ROCm images](https://github.com/%s/actions/workflows/owned-rocm.yml) for build and publication.\n' \
+            "$SOURCE_COMMIT" "$GH_REPO" >> "$GITHUB_STEP_SUMMARY"
+
+  cleanup:
+    needs: [prepare, update]
+    if: always() && needs.prepare.outputs.branch_created == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Remove this run's temporary sync branch
+        run: gh api --method DELETE "repos/$GH_REPO/git/refs/heads/$SYNC_BRANCH" --silent

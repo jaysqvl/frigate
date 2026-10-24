@@ -60,7 +60,41 @@ enabled. Set `FRIGATE_MIGRAPHX_CONSERVE_CPU`, `FRIGATE_MIGRAPHX_FAST_MATH`, or
 
 ## Build and release
 
-From the repository root with a Linux amd64 Docker builder:
+For normal use, run one of these from GitHub's **Actions** tab on `main`:
+
+- [Sync upstream and build](https://github.com/jaysqvl/frigate/actions/workflows/sync-upstream.yml):
+  click **Run workflow** to sync upstream `dev`, test the proposed merge with
+  Frigate's existing backend/frontend checks, update this fork's `main`, and
+  dispatch **Owned ROCm images**. Merge conflicts or failed checks leave `main`
+  unchanged. The temporary sync branch is removed after the run.
+- [Owned ROCm images](https://github.com/jaysqvl/frigate/actions/workflows/owned-rocm.yml):
+  click **Run workflow** to rebuild the current Frigate source with all four
+  pinned runtimes. Leave `release_tag` empty for an ordinary image build.
+
+Both entry points use GitHub-hosted Linux runners and need no NAS access or
+additional secrets. Follow **Owned ROCm images** for the final build result.
+Its `experimental-<profile>` tags advance only when every profile passes and
+the source is still the current `main` commit. Deployment is a separate step;
+these workflows leave running Frigate instances alone.
+
+The same buttons are available through GitHub CLI from any directory:
+
+```sh
+gh workflow run sync-upstream.yml --repo jaysqvl/frigate --ref main
+# Or rebuild without syncing upstream:
+gh workflow run owned-rocm.yml --repo jaysqvl/frigate --ref main
+```
+
+Rebuilding AMD itself is less frequent. Open
+[Frigate AMD runtimes](https://github.com/jaysqvl/AMDMIGraphX/actions/workflows/frigate-runtime.yml),
+select `main`, and run it with a new unused `release_tag`, such as
+`runtime-v0.1.6`. It builds and checks all four profiles, publishes their OCI
+images and archives, and completes the runtime prerelease after all pass.
+The source locks stay explicit: syncing an AMD mirror does not upgrade a pinned
+runtime. After reviewing a new runtime release, import it with the update command
+below and commit the lock. Normal Frigate updates reuse the existing runtime.
+
+For a local build instead, use the repository root with a Linux amd64 Docker builder:
 
 ```sh
 make version
@@ -120,7 +154,11 @@ An upstream Python ABI or base-library change may require rebuilding the binding
 the image build checks the CPython ABI before accepting the runtime.
 The older comparison branches retain the earlier qualification snapshots.
 
-For a normal upstream refresh, use the fork explicitly in every GitHub command:
+The **Sync upstream and build** workflow is the normal update entry point. It
+uses GitHub's fork-sync and merge APIs and the existing reusable PR checks. A
+non-forced main update rejects a concurrent conflicting change.
+
+For a manual PR-based refresh, use the fork explicitly in every GitHub command:
 
 ```sh
 gh repo sync jaysqvl/frigate --branch dev
