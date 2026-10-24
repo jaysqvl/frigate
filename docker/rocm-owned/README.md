@@ -29,15 +29,25 @@ has been tested. CI checks compiling/linking and application migration without
 GPU access. Earlier 5700G comparisons used different artifacts. New public
 binaries need their own hardware checks before production migration.
 
-After a successful image workflow, the public tags are
-`ghcr.io/jaysqvl/frigate:experimental-<profile>`. For example:
+After a successful current-main image workflow, the update channels are
+`ghcr.io/jaysqvl/frigate:latest-<profile>`. For example, a Ryzen 7 5700G uses:
 
 ```sh
-docker pull ghcr.io/jaysqvl/frigate:experimental-rocm-10.1-gfx90c
+docker pull ghcr.io/jaysqvl/frigate:latest-rocm-10.1-gfx90c
 ```
 
-Use the image digest from a release manifest to keep a deployment fixed while
-the experimental tags advance.
+Use that tag as the Unraid **Repository** or Compose `image` to see and pull
+future updates. Pulling or publishing an image does not change a running
+container; choose Update/Recreate in your deployment manager to apply it.
+The existing `experimental-<profile>` tags remain aliases of the same images.
+
+Every successful current-main build also creates a development
+[GitHub Release](https://github.com/jaysqvl/frigate/releases) with versioned
+image tags and four manifests. The default release tag is
+`frigate-v<Frigate version>-dev.<workflow run number>.<attempt>`.
+Use the versioned image or manifest digest to keep a deployment fixed while
+the update channels advance. These development releases are not upstream
+Frigate stable releases.
 
 The image sets `HSA_ENABLE_SDMA=0` before HSA discovery. Legacy profiles retain
 the measured MIGraphX workarounds; the modern profile omits them. The 7.2.4
@@ -69,13 +79,15 @@ For normal use, run one of these from GitHub's **Actions** tab on `main`:
   unchanged. The temporary sync branch is removed after the run.
 - [Owned ROCm images](https://github.com/jaysqvl/frigate/actions/workflows/owned-rocm.yml):
   click **Run workflow** to rebuild the current Frigate source with all four
-  pinned runtimes. Leave `release_tag` empty for an ordinary image build.
+  pinned runtimes. Leave `release_tag` empty to generate the release name
+  automatically, or supply a new unused `frigate-vVERSION` tag.
 
 Both entry points use GitHub-hosted Linux runners and need no NAS access or
 additional secrets. Follow **Owned ROCm images** for the final build result.
-Its `experimental-<profile>` tags advance only when every profile passes and
-the source is still the current `main` commit. Deployment is a separate step;
-these workflows leave running Frigate instances alone.
+Its `latest-<profile>` and `experimental-<profile>` tags advance only after
+every profile passes and the source release is published, with the source still
+at the current `main` commit. Deployment is a separate step; these workflows
+leave running Frigate instances alone.
 
 The same buttons are available through GitHub CLI from any directory:
 
@@ -115,9 +127,10 @@ migration checks on PRs. On `main`
 pushes or manual dispatch, it builds the application once and layers all four
 runtimes on that exact base digest. Images publish only after native linking,
 explicit-target HIPRTC helper compilation, detector tests, and config/database
-migration checks pass. After every profile passes, moving
-`experimental-<profile>` tags advance. A `frigate-vVERSION` tag or a manual
-`release_tag` also creates an experimental GitHub Release with four manifests.
+migration checks pass. After every profile passes, the workflow publishes a
+development GitHub Release and four versioned images, then advances the moving
+update channels for the current `main` commit. A `frigate-vVERSION` tag or manual
+`release_tag` overrides the generated release name.
 Each manifest records the shared application base digest, selected runtime,
 final image digest, source commit, and offline check-log hashes.
 Neither workflow deploys an instance, starts cameras, or uses production data.
