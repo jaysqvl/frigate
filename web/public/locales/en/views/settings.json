@@ -367,7 +367,8 @@
         "nameLength": "Camera name must be 64 characters or less",
         "invalidCharacters": "Camera name contains invalid characters",
         "nameExists": "Camera name already exists",
-        "customUrlRtspRequired": "Custom URLs must begin with \"rtsp://\" or \"rtsps://\". Manual configuration is required for non-RTSP camera streams."
+        "customUrlRtspRequired": "Custom URLs must begin with \"rtsp://\" or \"rtsps://\". Manual configuration is required for non-RTSP camera streams.",
+        "onvifPortInvalid": "ONVIF port must be a whole number from 1 to 65535"
       }
     },
     "step2": {
@@ -1084,13 +1085,6 @@
           "confirm": {
             "title": "Confirm Password",
             "placeholder": "Confirm Password"
-          },
-          "strength": {
-            "title": "Password strength: ",
-            "weak": "Weak",
-            "medium": "Medium",
-            "strong": "Strong",
-            "veryStrong": "Very Strong"
           },
           "requirements": {
             "title": "Password requirements:",
@@ -1933,6 +1927,10 @@
       "saved": "Saved"
     }
   },
+  "notificationTtl": {
+    "immediate": "Immediate",
+    "reliable": "Reliable"
+  },
   "retainMode": {
     "all": "All",
     "motion": "Motion",
@@ -2050,7 +2048,8 @@
       "profileBaseDisabled": "Recording is disabled in this camera's base config, so enabling it in a profile has no effect. Enable recording in the base config and use a profile to disable it instead."
     },
     "notifications": {
-      "profileBaseDisabled": "No cameras have notifications enabled in their base config, so enabling them in a profile has no effect. Enable notifications in the base config of at least one camera."
+      "profileBaseDisabled": "No cameras have notifications enabled in their base config, so enabling them in a profile has no effect. Enable notifications in the base config of at least one camera.",
+      "ttlDelay": "Notifications can arrive up to 30 seconds late and still link to the live view after the review item has ended."
     },
     "birdseye": {
       "objectTrackingDetectDisabled": "Birdseye includes tracked objects, but object detection is disabled for this camera. The camera will not appear in Birdseye.",
