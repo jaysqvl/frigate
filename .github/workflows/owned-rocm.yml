@@ -37,6 +37,7 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: |
+          make version
           python3 -m unittest discover -s docker/rocm-owned -p test_runtimes.py -v
           python3 -m unittest discover -s docker/rocm-owned -p test_smoke.py -v
           python3 docker/rocm-owned/runtimes.py check
