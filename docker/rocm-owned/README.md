@@ -41,13 +41,13 @@ future updates. Pulling or publishing an image does not change a running
 container; choose Update/Recreate in your deployment manager to apply it.
 The existing `experimental-<profile>` tags remain aliases of the same images.
 
-Every successful current-main build also creates a development
+Every successful current-main build also creates a normal fork
 [GitHub Release](https://github.com/jaysqvl/frigate/releases) with versioned
 image tags and four manifests. The default release tag is
 `frigate-v<Frigate version>-dev.<workflow run number>.<attempt>`.
 Use the versioned image or manifest digest to keep a deployment fixed while
-the update channels advance. These development releases are not upstream
-Frigate stable releases.
+the update channels advance. The `dev` version suffix identifies the upstream
+development base. GitHub's Latest release advances with the current-main images.
 
 The image sets `HSA_ENABLE_SDMA=0` before HSA discovery. Legacy profiles retain
 the measured MIGraphX workarounds; the modern profile omits them. The 7.2.4
@@ -128,7 +128,7 @@ pushes or manual dispatch, it builds the application once and layers all four
 runtimes on that exact base digest. Images publish only after native linking,
 explicit-target HIPRTC helper compilation, detector tests, and config/database
 migration checks pass. After every profile passes, the workflow publishes a
-development GitHub Release and four versioned images, then advances the moving
+normal fork GitHub Release and four versioned images, then advances the moving
 update channels for the current `main` commit. A `frigate-vVERSION` tag or manual
 `release_tag` overrides the generated release name.
 Each manifest records the shared application base digest, selected runtime,

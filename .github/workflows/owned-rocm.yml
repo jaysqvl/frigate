@@ -226,21 +226,23 @@ jobs:
           done
           cat >> tmp/notes.md <<'EOF'
 
-          The four attached manifests record runtime sources, image digests and check-log hashes. These are development prereleases. Linking, explicit-target compiler helpers, the detector adapter, config/database migration and service startup passed without GPU access or production data. CI does not certify every supported GPU; hardware validation remains separate.
+          The four attached manifests record runtime sources, image digests and check-log hashes. These versioned fork releases track Frigate's upstream development branch. Linking, explicit-target compiler helpers, the detector adapter, config/database migration and service startup passed without GPU access or production data. CI does not certify every supported GPU; hardware validation remains separate.
           EOF
           # Reserve the release before tagging images so duplicate names fail safely.
           gh release create "$RELEASE_TAG" tmp/release/*.json --target "$GITHUB_SHA" \
-            --title "$RELEASE_TAG" --notes-file tmp/notes.md --generate-notes --prerelease --draft
+            --title "$RELEASE_TAG" --notes-file tmp/notes.md --generate-notes --prerelease=false --draft --latest=false
           for profile in rocm-7.2.4 rocm-10.1-gfx90c rocm-10.1-vega rocm-10.1; do
             image=$(jq -er '.image_digests[0]' "tmp/release/$profile.json")
             docker buildx imagetools create --prefer-index=false \
               --tag "ghcr.io/jaysqvl/frigate:${RELEASE_TAG#frigate-v}-$profile" "$image"
           done
-          gh release edit "$RELEASE_TAG" --draft=false
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease=false
           printf 'Published [source release](https://github.com/%s/releases/tag/%s) and four versioned images.\n' \
             "$GH_REPO" "$RELEASE_TAG" >> "$GITHUB_STEP_SUMMARY"
       - name: Advance update channels for the current main release
         if: steps.release.outputs.tag != ''
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)
           if [ "$GITHUB_REF" != refs/heads/main ] || [ "$main" != "$GITHUB_SHA" ]; then
@@ -253,3 +255,4 @@ jobs:
               --tag "ghcr.io/jaysqvl/frigate:latest-$profile" \
               --tag "ghcr.io/jaysqvl/frigate:experimental-$profile" "$image"
           done
+          gh release edit "$RELEASE_TAG" --latest
