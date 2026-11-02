@@ -34,8 +34,9 @@ shutil.copytree(
 )
 sys.path.insert(0, str(WORKTREE))
 
-# Optional runtimes are absent on this CPU-only Mac. Never load vendor bindings.
+# Device-free adapter tests never load optional runtime bindings.
 for name in [
+    "onnxruntime",
     "py3nvml",
     "py3nvml.py3nvml",
     "tflite_runtime",
@@ -44,6 +45,9 @@ for name in [
     sys.modules[name] = types.ModuleType(name)
 sys.modules["tflite_runtime.interpreter"].Interpreter = MagicMock
 sys.modules["tflite_runtime.interpreter"].load_delegate = MagicMock()
+sys.modules["onnxruntime"].get_available_providers = MagicMock(
+    side_effect=AssertionError("ONNX runtime discovery blocked in adapter tests")
+)
 
 
 class BlockVendorImports(importlib.abc.MetaPathFinder):
@@ -83,6 +87,7 @@ with patch.object(pkgutil, "iter_modules", selected_plugins):
     from frigate.detectors.device import build_detector_config, parse_device
     from frigate.detectors.plugins import migraphx as plugin
     from frigate.util.config import migrate_models
+    from frigate.util.model import get_ort_providers
 
 
 class FakeShape:
@@ -99,6 +104,10 @@ class FakeArgument(np.ndarray):
 
 
 class TestLegacySourceCompatibility(unittest.TestCase):
+    def test_ort_provider_discovery_is_blocked(self):
+        with self.assertRaisesRegex(AssertionError, "ONNX runtime discovery blocked"):
+            get_ort_providers()
+
     def test_source_override_does_not_inspect_mounted_script_path(self):
         with (
             patch.dict(os.environ, {"FRIGATE_TEST_SOURCE_ROOT": "/opt/frigate"}),
