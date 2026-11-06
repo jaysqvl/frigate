@@ -488,6 +488,7 @@
         "edgetpu",
         "hailo",
         "memryx",
+        "migraphx",
         "onnx",
         "openvino",
         "rknn",
