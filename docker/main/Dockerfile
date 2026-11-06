@@ -60,9 +60,13 @@ ARG DEBIAN_FRONTEND
 RUN --mount=type=bind,source=docker/main/build_intel_media_driver.sh,target=/deps/build_intel_media_driver.sh \
     /deps/build_intel_media_driver.sh
 
-FROM wget AS go2rtc
+FROM --platform=${BUILDPLATFORM} golang:1.26.10-bookworm@sha256:5de7c99eb78ca5e515a4c340235d0955ec5964a5071c492c15503d7c267da473 AS go2rtc
 ARG TARGETARCH
+ENV CGO_ENABLED=0 GOFLAGS=-mod=readonly GOTOOLCHAIN=local
 RUN --mount=type=bind,source=docker/main/install_go2rtc.sh,target=/deps/install_go2rtc.sh \
+    --mount=type=bind,source=docker/main/go2rtc/2491-h264-fua.patch,target=/deps/2491-h264-fua.patch \
+    --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
     /deps/install_go2rtc.sh
 
 FROM wget AS tempio

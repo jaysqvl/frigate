@@ -61,6 +61,7 @@ state = json.load(sys.stdin)
 assert state["Status"] == "exited" and state["ExitCode"] == 0 and not state["OOMKilled"], state
 '
 }
+check go2rtc -u /checks/check_go2rtc.py
 check runtime -u /checks/smoke.py
 check adapter -u /checks/test_plugin.py
 check config-migrations -u -m unittest frigate.test.test_config_migration
